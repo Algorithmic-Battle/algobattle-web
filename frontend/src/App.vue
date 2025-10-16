@@ -37,7 +37,7 @@ watch(
         const response = await UserService.getLogin();
         if (response) {
           store.user = response.user;
-          store.team = response.team;
+          store.team = response.team as any;
           store.tournament = response.tournament;
           return;
         }

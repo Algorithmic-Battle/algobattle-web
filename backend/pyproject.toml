@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "algobattle_web"
-version = "0.17.4"
+version = "0.17.5"
 requires-python = "~=3.11"
 license = {text = "MIT"}
 authors = [{name = "Imogen Hergeth"}, {name = "Henri Lotze"}]
@@ -16,14 +16,14 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "algobattle-base~=4.3.0",
+    "algobattle-base~=4.3.4",
     "uvicorn~=0.25.0",
     "fastapi~=0.108.0",
     "python-jose[cryptography]~=3.3.0",
     "python-multipart~=0.0.6",
     "sqlalchemy~=2.0.25",
-    "pydantic~=2.5.3",
-    "pydantic-extra-types~=2.4.0",
+    "pydantic~=2.11.9",
+    "pydantic-extra-types~=2.10.6",
     "markdown~=3.5.2",
     "mysqlclient~=2.2.1",
     "sqlalchemy-utils~=0.41.1",

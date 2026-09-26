@@ -1,0 +1,30 @@
+{
+  "name": "algobattle-frontend",
+  "build": {
+    "context": "..",
+    "dockerfile": "../Dockerfile.dev"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "26"
+    }
+  },
+  "forwardPorts": [5173],
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite app",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Vue.volar",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "remoteUser": "node"
+}

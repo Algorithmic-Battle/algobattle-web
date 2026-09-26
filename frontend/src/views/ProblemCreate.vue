@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import FileInput from "../components/FileInput.vue";
-import { ProblemService } from "@client";
+import { createProblem as createProblemRequest, getProblems } from "@client";
 import router from "@/router";
 import type { Problem } from "@client";
 import { computed, onMounted, ref, watch } from "vue";
@@ -31,19 +31,27 @@ const imageUrl = computed(() => {
 });
 
 onMounted(async () => {
-  problems.value = await ProblemService.get({ tournament: store.tournament?.id });
+  const result = await getProblems({ tournament: store.tournament?.id });
+  problems.value = result.data ?? {};
 });
 
-async function createProblem() {
+async function submitCreateProblem() {
   if (!store.tournament) {
     return;
   }
   try {
     const { file, copyFrom, ...payload } = data.value;
-    const location = await ProblemService.create({
-      formData: { ...payload, problem: file || copyFrom!, tournament: store.tournament.id },
+    const result = await createProblemRequest({
+      tournament: store.tournament.id,
+      start: payload.start,
+      end: payload.end,
+      alt_text: payload.alt,
+      description: payload.description,
+      color: payload.color,
+      bodyCreateProblem: { file: file ?? copyFrom, ...payload } as any,
     });
-    router.push(location);
+    const location = result.data ?? "/";
+    router.push(location as string);
   } catch {
     error.value.type = "server";
   }
@@ -157,7 +165,7 @@ watch(() => data.value.file, () => data.value.copyFrom = undefined);
             id="display_form"
             ref="display_form"
             class="card-body"
-            @submit.prevent="createProblem"
+            @submit.prevent="submitCreateProblem"
           >
             <div class="row">
               <div class="col-5">

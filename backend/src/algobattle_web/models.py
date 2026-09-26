@@ -37,6 +37,7 @@ from sqlalchemy.orm import (
     Mapped,
     MappedAsDataclass,
     Session,
+    declared_attr,
     mapped_column,
     registry,
     relationship,
@@ -174,13 +175,15 @@ class RawBase(MappedAsDataclass, DeclarativeBase):
         kw_only: _NoArg | bool = _NoArg.NO_ARG,
         dataclass_callable: _NoArg | Callable[..., type] = _NoArg.NO_ARG,
     ) -> None:
-        if getattr(cls, "__tablename___", None) is None:
-            cls.__tablename__ = cls.__name__.lower() + "s"
-        if not hasattr(cls, "Schema"):
+        if "Schema" not in cls.__dict__:
             cls.Schema = getattr(schemas, cls.__name__)
         super().__init_subclass__(
             init, repr, eq, order, unsafe_hash, match_args, kw_only, dataclass_callable
         )
+
+    @declared_attr.directive
+    def __tablename__(cls) -> str:
+        return cls.__name__.lower() + "s"
 
     def encode(self) -> BaseSchema:
         return self.Schema.model_validate(self)
@@ -411,7 +414,7 @@ class User(Base):
     settings_id: Mapped[UUID] = mapped_column(ForeignKey("usersettingss.id"), init=False)
 
     def __post_init__(self) -> None:
-        if self.settings is None: # type: ignore
+        if self.settings is None:  # type: ignore
             self.settings = UserSettings()
 
     @property
@@ -527,7 +530,7 @@ class Team(Base):
     __table_args__ = (UniqueConstraint("name", "tournament_id"),)
 
     def __post_init__(self) -> None:
-        if self.settings is None: # type: ignore
+        if self.settings is None:  # type: ignore
             self.settings = TeamSettings()
 
     def __str__(self) -> str:
@@ -694,7 +697,7 @@ class Program(Base, PermissionCheck):
 
 
 class ScheduledMatch(Base):
-    __tablename__ = "scheduledmatches"
+    __tablename__ = "scheduledmatches"  # type: ignore
 
     time: Mapped[datetime]
     problem: Mapped[Problem] = relationship()
@@ -715,8 +718,6 @@ class ResultParticipant(RawBase):
     solver_id: Mapped[ID | None] = mapped_column(ForeignKey("programs.id"), init=False)
     solver: Mapped[Program | None] = relationship(foreign_keys=[solver_id])
     points: Mapped[float]
-
-    Schema = schemas.ResultParticipant
 
     def __hash__(self) -> int:
         return hash(self.team_id)
@@ -748,7 +749,7 @@ class MatchResult(Base, PermissionCheck):
 
 
 class ExtraPoints(Base, PermissionCheck):
-    __tablename__ = "extrapoints"
+    __tablename__ = "extrapoints"  # type: ignore
 
     time: Mapped[datetime]
     tag: Mapped[str32]

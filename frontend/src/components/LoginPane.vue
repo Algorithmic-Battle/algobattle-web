@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { UserService } from "@client";
+import { login as loginRequest } from "@client";
 import { ref } from "vue";
 import { useRoute } from "vue-router";
 
@@ -7,9 +7,9 @@ const route = useRoute();
 const email = ref("");
 const msg = ref("");
 
-async function login() {
+async function submitLogin() {
   try {
-    await UserService.login({ requestBody: { email: email.value, target_url: route.fullPath } });
+    await loginRequest({ target_url: route.fullPath, body: email.value });
     msg.value = "email_sent";
   } catch {
     msg.value = "error";
@@ -27,9 +27,9 @@ async function login() {
     </div>
     <div class="mb-3">
       <label for="email" class="form-label">Email address</label>
-      <input type="email" class="form-control" id="email" autocomplete="email" required v-model="email" @keyup.enter="login" />
+      <input type="email" class="form-control" id="email" autocomplete="email" required v-model="email" @keyup.enter="submitLogin" />
     </div>
-    <button type="button" class="btn btn-primary" @click="login">Send login link</button>
+    <button type="button" class="btn btn-primary" @click="submitLogin">Send login link</button>
   </div>
 </template>
 

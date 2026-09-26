@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { Modal } from "bootstrap";
-import { TournamentService, ReportService, ProblemService, TeamService } from "@client";
+import {
+  addReport,
+  allTournaments,
+  deleteProblem as deleteProblemRequest,
+  deleteReport,
+  editProblem as editProblemRequest,
+  getProblemPageData,
+  getProblems,
+  getReports,
+  getTeams,
+} from "@client";
 import type { Tournament, Report, Problem, Team, ProblemPageData, DbFile } from "@client";
 import { store, type InputFileEvent, type ModelDict } from "@/shared";
 import { onMounted, ref, type Ref } from "vue";
@@ -27,22 +37,27 @@ const error = ref(null as null | string);
 const now = new Date();
 
 onMounted(async () => {
-  const problems = await ProblemService.get({
+  const problemsResult = await getProblems({
     name: route.params.problemName as string,
-    tournamentName: route.params.tournamentName as string,
+    tournament_name: route.params.tournamentName as string,
   });
+  const problems = (problemsResult.data ?? {}) as Record<string, Problem>;
   if (Object.values(problems).length === 1) {
-    problem.value = Object.values(problems)[0];
+    problem.value = Object.values(problems)[0] as Problem;
   } else {
     return;
   }
-  pageData.value = await ProblemService.pageData({ id: problem.value.id });
+  const pageDataResult = await getProblemPageData({ id: problem.value.id });
+  pageData.value = pageDataResult.data ?? null;
   if (store.team == "admin") {
-    tournaments.value = await TournamentService.get({});
+    const tournamentResult = await allTournaments();
+    tournaments.value = tournamentResult.data ?? {};
   }
-  const ret = await ReportService.get({ problem: problem.value.id });
-  reports.value = Object.fromEntries(Object.values(ret.reports).map((report) => [report.team, report]));
-  teams.value = (await TeamService.get({ tournament: problem.value.tournament.id })).teams;
+  const ret = await getReports({ problem: problem.value.id });
+  const reportData = (ret.data ?? { reports: {} }) as { reports?: Record<string, Report> };
+  reports.value = Object.fromEntries(Object.values(reportData.reports ?? {}).map((report: Report) => [report.team, report]));
+  const teamResult = await getTeams({ tournament: problem.value.tournament.id });
+  teams.value = (teamResult.data?.teams ?? {}) as ModelDict<Team>;
 });
 
 const editReport = {
@@ -70,13 +85,15 @@ async function uploadReport() {
   if (!editReport.newFile || editReport.newFile.size == 0 || !problem.value || !editReport.team) {
     return;
   }
-  var newReport = null;
-  newReport = await ReportService.upload({
+  const result = await addReport({
     problem: problem.value.id,
     team: editReport.team.id,
-    formData: { file: editReport.newFile },
+    bodyAddReport: { file: editReport.newFile },
   });
-  reports.value[newReport.team] = newReport;
+  const createdReport = (result.data ?? null) as Report | null;
+  if (createdReport) {
+    reports.value[createdReport.team] = createdReport;
+  }
   if (editReport.fileSelect.value) {
     editReport.fileSelect.value.value = "";
   }
@@ -90,7 +107,7 @@ async function removeReport() {
     editReport.confirmDelete.value = true;
     return;
   }
-  ReportService.delete({ problem: problem.value.id, team: editReport.team.id });
+  await deleteReport({ problem: problem.value.id, team: editReport.team.id });
   editReport.confirmDelete.value = false;
   if (editReport.fileSelect.value) {
     editReport.fileSelect.value.value = "";
@@ -129,31 +146,31 @@ function convertFileEdit<T>(file: DbFile | T): T | undefined {
 
 async function submitEdit() {
   const prob = editProblem.value!;
-  problem.value = await ProblemService.edit({
+  const result = await editProblemRequest({
     id: problem.value!.id,
-    formData: {
-      name: prob.name,
-      tournament: prob.tournament.id,
-      start: prob.start || "remove",
-      end: prob.end || "remove",
-      description: prob.description,
-      alt_text: prob.alt,
-      colour: prob.colour,
+    name: prob.name,
+    tournament: prob.tournament.id,
+    start: prob.start || "remove",
+    end: prob.end || "remove",
+    description: prob.description,
+    alt_text: prob.alt,
+    colour: prob.colour,
+    bodyEditProblem: {
       file: convertFileEdit(prob.file),
       image: convertFileEdit(prob.image),
     },
   });
+  problem.value = (result.data ?? problem.value) as Problem | undefined;
   Modal.getOrCreateInstance("#problemModal").hide();
 }
 async function checkName() {
   const tournament = editProblem.value!.tournament;
   try {
-    const probs = Object.values(
-      await ProblemService.get({
-        tournamentName: tournament.name,
-        name: editProblem.value!.name,
-      })
-    );
+    const problemsResult = await getProblems({
+      tournament_name: tournament.name,
+      name: editProblem.value!.name,
+    });
+    const probs = Object.values(problemsResult.data ?? {});
     if (probs.length != 0 && probs[0].id != problem.value!.id) {
       error.value = "name";
       return;
@@ -161,12 +178,12 @@ async function checkName() {
   } catch {}
   error.value = null;
 }
-async function deleteProblem() {
+async function deleteSelectedProblem() {
   if (!confirmDeleteProblem.value) {
     confirmDeleteProblem.value = true;
     return;
   }
-  await ProblemService.delete({ id: problem.value!.id });
+  await deleteProblemRequest({ id: problem.value!.id });
   Modal.getOrCreateInstance("#problemModal").hide();
   router.push({ name: "problems" });
 }
@@ -485,7 +502,7 @@ async function deleteProblem() {
           >
             Cancel
           </button>
-          <button type="button" class="btn btn-danger ms-2" @click="deleteProblem">
+          <button type="button" class="btn btn-danger ms-2" @click="deleteSelectedProblem">
             {{ confirmDeleteProblem ? "Confirm deletion" : "Delete Problem" }}
           </button>
           <button type="button" class="btn btn-secondary ms-auto" data-bs-dismiss="modal">Discard</button>

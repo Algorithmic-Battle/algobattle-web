@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { ProblemService, ProgramService, type Role } from "@client";
+import {
+  type Role,
+  deleteProgram as deleteProgramRequest,
+  getProblems,
+  searchProgram,
+  uploadProgram as uploadProgramRequest,
+} from "@client";
 import { store, type ModelDict } from "@/shared";
 import { Modal } from "bootstrap";
 import type { Problem, Program, Team } from "@client";
@@ -44,15 +50,17 @@ const activeProblems = computed(() => {
 });
 
 async function search(offset: number = 0) {
-  const ret = await ProgramService.get({ tournament: store.tournament?.id, offset: offset });
+  const ret = await searchProgram({ tournament: store.tournament?.id, offset });
+  const data = ret.data ?? { programs: {}, problems: {}, teams: {}, total: 0 };
   if (store.team === "admin") {
-    problems.value = ret.problems;
+    problems.value = data.problems ?? {};
   } else {
-    problems.value = await ProblemService.get({ tournament: store.tournament?.id });
+    const problemResult = await getProblems({ tournament: store.tournament?.id });
+    problems.value = problemResult.data ?? {};
   }
-  programs.value = ret.programs;
-  teams.value = ret.teams;
-  total.value = ret.total;
+  programs.value = data.programs ?? {};
+  teams.value = data.teams ?? {};
+  total.value = data.total ?? 0;
 }
 watch(offset, search);
 
@@ -81,20 +89,21 @@ async function uploadProgram() {
   ) {
     return;
   }
-  const newProgram = await ProgramService.create({
+  const newProgramResult = await uploadProgramRequest({
     name: newProgData.value.name,
     role: newProgData.value.role,
     problem: newProgData.value.problem,
-    formData: {
-      file: newProgData.value.file,
-    },
+    bodyUploadProgram: { file: newProgData.value.file },
   });
-  programs.value[newProgram.id] = newProgram;
+  const newProgram = (newProgramResult.data ?? null) as Program | null;
+  if (newProgram) {
+    programs.value[newProgram.id] = newProgram;
+  }
   modal.hide();
 }
 
 async function deleteProgram(program: Program) {
-  await ProgramService.delete({ id: program.id });
+  await deleteProgramRequest({ id: program.id });
   delete programs.value[program.id];
 }
 

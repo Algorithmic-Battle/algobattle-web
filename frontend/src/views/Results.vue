@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { store, type ModelDict, formatDateTime } from "@/shared";
 import {
-  MatchService,
-  TournamentService,
-  ProblemService,
+  addResult,
+  createExtraPoints,
+  deleteExtraPoints as deleteExtraPointsRequest,
+  deleteResults,
+  editExtraPoints,
+  getExtraPoints,
+  getProblems,
+  getTeams,
+  results as getResults,
+  searchProgram,
   type MatchStatus,
-  ProgramService,
   type Role,
-  TeamService,
-  ExtrapointsService,
+  updateResult,
 } from "@client";
 import { Modal } from "bootstrap";
 import type {
@@ -30,12 +35,12 @@ import DeleteButton from "@/components/DeleteButton.vue";
 
 const activePage = ref<"results" | "extrapoints">("results");
 const problems = ref<ModelDict<Problem>>({});
-const results = ref<ModelDict<MatchResult>>({});
+const resultsData = ref<ModelDict<MatchResult>>({});
 const teams = ref<ModelDict<Team>>({});
 const programs = ref<{ [key: string]: Program[] }>({});
 const chartState = ref(0);
 const sortedResults = computed(() => {
-  const sorted = Object.values(results.value);
+  const sorted = Object.values(resultsData.value);
   sorted.sort((a, b) => {
     if (a.time < b.time) {
       return 1;
@@ -51,18 +56,20 @@ const sortedResults = computed(() => {
 let editModal: Modal;
 let detailModal: Modal;
 onMounted(async () => {
-  const res = await MatchService.getResult({ tournament: store.tournament?.id });
-  problems.value = res.problems;
-  results.value = res.results;
-  teams.value = res.teams;
+  const res = await getResults({ tournament: store.tournament?.id });
+  const data = res.data ?? { problems: {}, results: {}, teams: {} };
+  problems.value = data.problems ?? {};
+  resultsData.value = (data.results ?? {}) as ModelDict<MatchResult>;
+  teams.value = (data.teams ?? {}) as ModelDict<Team>;
   if (store.team == "admin") {
     var remaining = true;
     var offset = 0;
     while (remaining) {
-      const res = await TeamService.get({ tournament: store.tournament?.id, offset: offset });
-      teams.value = { ...teams.value, ...res.teams };
-      const numResults = Object.keys(res.teams).length;
-      if (res.total > offset + numResults) {
+      const res = await getTeams({ tournament: store.tournament?.id, offset });
+      const teamData = res.data ?? { teams: {}, total: 0 };
+      teams.value = { ...teams.value, ...(teamData.teams ?? {}) };
+      const numResults = Object.keys(teamData.teams ?? {}).length;
+      if ((teamData.total ?? 0) > offset + numResults) {
         offset += numResults;
       } else {
         remaining = false;
@@ -70,9 +77,9 @@ onMounted(async () => {
     }
   }
   programs.value = {};
-  Object.values(res.results)
-    .flatMap((r) => r.participants.flatMap((p) => [p.generator, p.solver]))
-    .forEach((prog) => {
+  Object.values(data.results ?? {})
+    .flatMap((r: any) => (r.participants ?? []).flatMap((p: any) => [p.generator, p.solver]))
+    .forEach((prog: any) => {
       if (!prog) {
         return;
       }
@@ -88,11 +95,13 @@ onMounted(async () => {
     });
   editModal = Modal.getOrCreateInstance("#editModal");
   if (store.team == "admin") {
-    problems.value = await ProblemService.get({
+    const problemResult = await getProblems({
       tournament: store.tournament?.id,
     });
+    problems.value = problemResult.data ?? {};
   }
-  extrapoints.value = await ExtrapointsService.get({ tournament: store.tournament?.id });
+  const extraResult = await getExtraPoints({ tournament: store.tournament?.id });
+  extrapoints.value = extraResult.data ?? [];
   detailModal = Modal.getOrCreateInstance("#detailModal");
 });
 
@@ -128,44 +137,43 @@ function openEdit(match: MatchResult | undefined) {
 async function sendData() {
   var res;
   if (editData.value.id) {
-    res = await MatchService.editResult({
+    res = await updateResult({
       id: editData.value.id,
-      formData: {
-        problem: editData.value.problem!,
-        status: editData.value.status!,
-        time: editData.value.time!,
-        logs: editData.value.newLogs,
-        teams: editData.value.participants.map((p) => p.team_id!),
-        generators: editData.value.participants.map((p) => p.generator?.id!),
-        solvers: editData.value.participants.map((p) => p.solver?.id!),
-        points: editData.value.participants.map((p) => p.points!),
-      },
-    });
-  } else {
-    res = await MatchService.createResult({
       problem: editData.value.problem!,
       status: editData.value.status!,
       time: editData.value.time!,
-      formData: {
-        logs: editData.value.newLogs,
-        teams: editData.value.participants.map((p) => p.team_id!),
-        generators: editData.value.participants.map((p) => p.generator?.id!),
-        solvers: editData.value.participants.map((p) => p.solver?.id!),
-        points: editData.value.participants.map((p) => p.points!),
-      },
+      teams: editData.value.participants.filter((p) => !!p.team_id).map((p) => p.team_id as string) as any,
+      generators: editData.value.participants.filter((p) => !!p.generator?.id).map((p) => p.generator!.id) as any,
+      solvers: editData.value.participants.filter((p) => !!p.solver?.id).map((p) => p.solver!.id) as any,
+      points: editData.value.participants.map((p) => p.points ?? 0) as any,
+      bodyUpdateResult: { logs: editData.value.newLogs },
+    });
+  } else {
+    res = await addResult({
+      problem: editData.value.problem!,
+      status: editData.value.status!,
+      time: editData.value.time!,
+      teams: editData.value.participants.filter((p) => !!p.team_id).map((p) => p.team_id as string) as any,
+      generators: editData.value.participants.filter((p) => !!p.generator?.id).map((p) => p.generator!.id) as any,
+      solvers: editData.value.participants.filter((p) => !!p.solver?.id).map((p) => p.solver!.id) as any,
+      points: editData.value.participants.map((p) => p.points ?? 0) as any,
+      bodyAddResult: { logs: editData.value.newLogs },
     });
   }
-  results.value[res.id] = res;
+  const resultData = (res.data ?? null) as MatchResult | null;
+  if (resultData) {
+    resultsData.value[resultData.id] = resultData;
+  }
   editModal.hide();
   chartState.value++;
 }
 
 async function deleteResult() {
   if (editData.value.id) {
-    await MatchService.deleteResults({
+    await deleteResults({
       id: editData.value.id,
     });
-    delete results.value[editData.value.id];
+    delete resultsData.value[editData.value.id];
     editModal.hide();
     chartState.value++;
   }
@@ -176,12 +184,13 @@ function getPrograms(team: string, role: Role) {
     return;
   }
   programs.value[editData.value.problem + team + role] = [];
-  ProgramService.get({
-    team: team,
-    role: role,
+  searchProgram({
+    team,
+    role,
     problem: editData.value.problem,
   }).then((response) => {
-    programs.value[editData.value.problem + team + role] = Object.values(response.programs);
+    const data = response.data ?? { programs: {} };
+    programs.value[editData.value.problem + team + role] = Object.values(data.programs ?? {});
   });
 }
 
@@ -231,17 +240,31 @@ async function openExtraEdit(extra: ExtraPoints | undefined) {
 
 async function sendExtraPointsData() {
   if (extraEditData.value.id) {
-    const res = await ExtrapointsService.edit({
+    const res = await editExtraPoints({
       id: extraEditData.value.id,
-      requestBody: { ...extraEditData.value, team: extraEditData.value.team?.id },
+      time: extraEditData.value.time,
+      tag: extraEditData.value.tag,
+      team: extraEditData.value.team?.id,
+      points: extraEditData.value.points,
+      description: extraEditData.value.description,
     });
-    const i = extrapoints.value.findIndex((e) => e.id === res.id);
-    extrapoints.value[i] = res;
+    const data = (res.data ?? null) as ExtraPoints | null;
+    if (data) {
+      const i = extrapoints.value.findIndex((e) => e.id === data.id);
+      extrapoints.value[i] = data;
+    }
   } else {
-    const res = await ExtrapointsService.create({
-      requestBody: { ...(extraEditData.value as ExtraPoints), team: extraEditData.value.team!.id },
+    const res = await createExtraPoints({
+      time: extraEditData.value.time!,
+      team: extraEditData.value.team!.id,
+      points: extraEditData.value.points!,
+      description: extraEditData.value.description,
+      body: extraEditData.value.tag ?? "",
     });
-    extrapoints.value.push(res);
+    const data = (res.data ?? null) as ExtraPoints | null;
+    if (data) {
+      extrapoints.value.push(data);
+    }
   }
   Modal.getOrCreateInstance("#extraPointsModal").hide();
   chartState.value++;
@@ -249,7 +272,7 @@ async function sendExtraPointsData() {
 
 async function deleteExtraPoints() {
   if (extraEditData.value.id) {
-    await ExtrapointsService.delete({ id: extraEditData.value.id });
+    await deleteExtraPointsRequest({ id: extraEditData.value.id });
     const i = extrapoints.value.findIndex((e) => e.id === extraEditData.value.id);
     extrapoints.value.splice(i, 1);
     Modal.getOrCreateInstance("#extraPointsModal").hide();

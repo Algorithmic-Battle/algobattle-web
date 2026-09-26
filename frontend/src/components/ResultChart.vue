@@ -17,7 +17,7 @@ import {
 } from "chart.js";
 import { Line } from "vue-chartjs";
 import {
-  TournamentService,
+  getScores,
   type MatchEvent,
   type ExtraEvent,
   type MatchResult,
@@ -64,7 +64,8 @@ const matchEvents = computed(
 );
 
 async function getData() {
-  scoreData.value = await TournamentService.getScores({ id: props.tournament.id });
+  const result = await getScores({ id: props.tournament.id });
+  scoreData.value = result.data ?? undefined;
 }
 watch(() => props.state, getData);
 onMounted(getData);

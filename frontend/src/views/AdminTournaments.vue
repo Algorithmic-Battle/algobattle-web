@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { TournamentService } from "@client";
+import { allTournaments, createTournament, deleteTournament as deleteTournamentRequest, editTournament } from "@client";
 import { Modal } from "bootstrap";
 import { onMounted, ref } from "vue";
 import type { Tournament } from "@client";
@@ -7,7 +7,8 @@ import type { Tournament } from "@client";
 const tournaments = ref<{ [key: string]: Tournament }>({});
 
 onMounted(async () => {
-  tournaments.value = await TournamentService.get({});
+  const result = await allTournaments();
+  tournaments.value = result.data ?? {};
 });
 
 const error = ref("");
@@ -37,16 +38,13 @@ function openModal(action: string, tournament: Tournament | null) {
 async function submitEdit() {
   try {
     if (data.value.action == "create") {
-      const newTournament = await TournamentService.create({
-        requestBody: data.value.name,
-      });
-      tournaments.value[newTournament.id] = newTournament;
+      const newTournament = await createTournament({ body: data.value.name });
+      const created = newTournament.data ?? { id: "", name: data.value.name };
+      tournaments.value[created.id] = created as Tournament;
     } else {
-      const edited = await TournamentService.edit({
-        id: data.value.id,
-        requestBody: data.value.name,
-      });
-      tournaments.value[edited.id] = edited;
+      const edited = await editTournament({ id: data.value.id, body: data.value.name });
+      const updated = edited.data ?? { id: data.value.id, name: data.value.name };
+      tournaments.value[updated.id] = updated as Tournament;
     }
     Modal.getOrCreateInstance("#tournamentModal").toggle();
   } catch {
@@ -58,7 +56,7 @@ async function deleteTournament() {
     data.value.confirmDelete = true;
     return;
   }
-  await TournamentService.delete({ id: data.value.id });
+  await deleteTournamentRequest({ id: data.value.id });
   delete tournaments.value[data.value.id];
   Modal.getOrCreateInstance("#tournamentModal").toggle();
 }

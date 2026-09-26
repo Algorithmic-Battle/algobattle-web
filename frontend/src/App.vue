@@ -2,11 +2,12 @@
 import { RouterView, useRouter } from "vue-router";
 import PageNavbarIcon from "./components/HomeNavbarIcon.vue";
 import { store } from "@/shared";
-import { UserService, type Team, SettingsService } from "@client";
+import { type Team, editUserSettings, getSelf, getServerSettings, getToken } from "@client";
 import LoginPane from "./components/LoginPane.vue";
 import { useCookies } from "@vueuse/integrations/useCookies";
 import { computed, onMounted, watch } from "vue";
 import { Dropdown } from "bootstrap";
+import { client } from "@client/client.gen";
 
 const router = useRouter();
 const cookies = useCookies();
@@ -20,8 +21,14 @@ const queryToken = computed(() => {
 });
 watch(queryToken, async (newToken) => {
   if (newToken) {
-    const data = await UserService.getToken({ loginToken: newToken });
-    cookies.set("algobattle_user_token", data.token, { expires: new Date(data.expires) });
+    const result = await getToken({ login_token: newToken });
+    if (result.error || !result.data) {
+      return;
+    }
+    cookies.set("algobattle_user_token", result.data.token, { expires: new Date(result.data.expires) });
+    client.setConfig({
+      headers: { "X-User-Token": result.data.token },
+    });
     router.replace({ path: router.currentRoute.value.path });
   }
 });
@@ -32,13 +39,15 @@ const userToken = computed(() => {
 watch(
   userToken,
   async (userToken) => {
-    if (userToken) {
+    const token = typeof userToken === "string" ? userToken : undefined;
+    client.setConfig({ headers: { "X-User-Token": token } });
+    if (token) {
       try {
-        const response = await UserService.getLogin();
-        if (response) {
-          store.user = response.user;
-          store.team = response.team as any;
-          store.tournament = response.tournament;
+        const response = await getSelf();
+        if (!response.error && response.data) {
+          store.user = response.data.user;
+          store.team = response.data.team;
+          store.tournament = response.data.tournament;
           return;
         }
       } catch {}
@@ -51,6 +60,7 @@ watch(
 async function logout() {
   Dropdown.getOrCreateInstance("#loggedInDropdown").hide();
   cookies.remove("algobattle_user_token");
+  client.setConfig({ headers: { "X-User-Token": undefined } });
   router.go(0);
 }
 
@@ -58,11 +68,7 @@ async function selectTeam(team: Team | "admin") {
   if (team == "admin" && !store.user?.is_admin) {
     return;
   }
-  await SettingsService.editUser({
-    requestBody: {
-      team: team == "admin" ? team : team.id,
-    }
-  });
+  await editUserSettings({ team: team == "admin" ? "admin" : team.id });
   router.go(0);
 }
 
@@ -79,7 +85,10 @@ const displayName = computed(() => {
 });
 
 onMounted(async () => {
-  store.serverSettings = await SettingsService.getServer();
+  const result = await getServerSettings();
+  if (!result.error) {
+    store.serverSettings = result.data ?? undefined;
+  }
 })
 </script>
 

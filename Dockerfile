@@ -8,13 +8,12 @@ ENV ALGOBATTLE_DB_PW=${ALGOBATTLE_DB_PW} ALGOBATTLE_BASE_URL=${ALGOBATTLE_BASE_U
 RUN algobattle_api > openapi.json
 RUN pip show algobattle_base | grep -oP "Version: \K[^\n]+" > algobattle_version.txt
 
-FROM node:20 as frontend_builder
+FROM node:26 as frontend_builder
 WORKDIR /code
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/env.d.ts frontend/index.html frontend/tsconfig.json frontend/tsconfig.node.json frontend/vite.config.ts ./
 COPY --from=api_builder /code/openapi.json openapi.json
-RUN npx openapi-typescript-codegen --input ./openapi.json --output ./typescript_client --useOptions --useUnionTypes
 COPY frontend/public public/
 COPY frontend/src src/
 RUN npm run build

@@ -2,7 +2,8 @@ FROM python:3.14
 
 WORKDIR /algobattle
 COPY pyproject.toml ./
-RUN mkdir src/algobattle_web src/algobattle_web/alembic
+RUN mkdir src/ src/algobattle_web/ src/algobattle_web/alembic/
+COPY src/algobattle_web/__init__.py src/algobattle_web/__init__.py
 RUN pip install -e .[dev]
 ENV DEV=true
 

@@ -254,7 +254,7 @@ class LoginInfo(BaseSchema):
     tournament: schemas.Tournament | None
 
 
-@router.get("/user/login", tags=["user"], name="getLogin", response_model=LoginInfo)
+@router.get("/user/login", tags=["user"], response_model=LoginInfo)
 def get_self(*, db: Database, login: LoggedIn) -> LoggedIn:
     if login.user is not None:
         if login.user.is_admin and login.user.settings.selected_tournament is None:
@@ -317,14 +317,14 @@ def get_token(*, db: Database, login_token: str) -> TokenData:
 # *******************************************************************************
 
 
-@router.get("/settings/user", tags=["settings"], name="getUser")
+@router.get("/settings/user", tags=["settings"])
 def get_user_settings(*, db: Database, user: CurrUser) -> UserSettings:
     if user is None:
         raise HTTPException(404, "Not logged in")
     return user.settings
 
 
-@router.patch("/settings/user", tags=["settings"], name="editUser")
+@router.patch("/settings/user", tags=["settings"])
 def edit_user_settings(
     *,
     db: Database,
@@ -356,7 +356,7 @@ def edit_user_settings(
     db.commit()
 
 
-@router.get("/settings/team", tags=["settings"], name="getTeam")
+@router.get("/settings/team", tags=["settings"])
 def get_team_settings(*, db: Database, login: LoggedIn) -> TeamSettings:
     team = login.team
     if not isinstance(team, Team):
@@ -364,7 +364,7 @@ def get_team_settings(*, db: Database, login: LoggedIn) -> TeamSettings:
     return team.settings
 
 
-@router.patch("/settings/team", tags=["settings"], name="editTeam")
+@router.patch("/settings/team", tags=["settings"])
 def edit_team_settings(*, db: Database, login: LoggedIn, name: InBody[Str32 | None] = None) -> None:
     team = login.team
     if not isinstance(team, Team):
@@ -382,7 +382,7 @@ def edit_team_settings(*, db: Database, login: LoggedIn, name: InBody[Str32 | No
     db.commit()
 
 
-@router.get("/settings/server", tags=["settings"], name="getServer")
+@router.get("/settings/server", tags=["settings"])
 def get_server_settings(
     *, db: Database, login: LoggedIn
 ) -> schemas.ServerSettings | schemas.AdminServerSettings:
@@ -392,7 +392,7 @@ def get_server_settings(
         return schemas.ServerSettings.model_validate(ServerSettings.get(db))
 
 
-@admin.patch("/settings/server", tags=["settings"], name="editServer")
+@admin.patch("/settings/server", tags=["settings"])
 def edit_server_settings(
     *,
     db: Database,
@@ -430,7 +430,7 @@ def home(db: Database) -> str | None:
 # *******************************************************************************
 
 
-@router.get("/tournament", tags=["tournament"], name="get")
+@router.get("/tournament", tags=["tournament"])
 def all_tournaments(
     *, db: Database, login: LoggedIn, name: str | None = None, id: ID | None = None
 ) -> dict[ID, schemas.Tournament]:
@@ -445,7 +445,7 @@ def all_tournaments(
     return encode(tournaments)
 
 
-@admin.post("/tournament", tags=["tournament"], name="create")
+@admin.post("/tournament", tags=["tournament"])
 def create_tournament(*, db: Database, name: Str32) -> Tournament:
     if db.scalars(select(Tournament).filter(Tournament.name == name)).first() is not None:
         raise ValueTaken("name", name)
@@ -455,7 +455,7 @@ def create_tournament(*, db: Database, name: Str32) -> Tournament:
     return tournament
 
 
-@admin.patch("/tournament/{id}", tags=["tournament"], name="edit")
+@admin.patch("/tournament/{id}", tags=["tournament"])
 def edit_tournament(*, db: Database, id: ID, name: Str32) -> Tournament:
     tournament = unwrap(Tournament.get(db, id))
     if (
@@ -468,7 +468,7 @@ def edit_tournament(*, db: Database, id: ID, name: Str32) -> Tournament:
     return tournament
 
 
-@admin.delete("/tournament/{id}", tags=["tournament"], name="delete")
+@admin.delete("/tournament/{id}", tags=["tournament"])
 def delete_tournament(*, db: Database, id: ID) -> None:
     tournament = unwrap(Tournament.get(db, id))
     db.delete(tournament)
@@ -501,7 +501,7 @@ class ScoreData(BaseSchema):
     problems: dict[ID, schemas.Problem]
 
 
-@router.get("/tournament/{id}/scores/", tags=["tournament"], name="getScores")
+@router.get("/tournament/{id}/scores/", tags=["tournament"])
 def get_scores(db: Database, login: LoggedIn, id: ID) -> ScoreData:
     tournament = Tournament.get_unwrap(db, id)
     tournament.assert_visible(login.team)
@@ -551,7 +551,7 @@ class TeamSearch(BaseSchema):
     users: dict[ID, schemas.User]
 
 
-@admin.get("/team", tags=["team"], name="get")
+@admin.get("/team", tags=["team"])
 def get_teams(
     *,
     db: Database,
@@ -584,7 +584,7 @@ def get_teams(
     return TeamSearch(total=team_count, teams=encode(teams), users=encode(users))
 
 
-@admin.post("/team", tags=["team"], name="create")
+@admin.post("/team", tags=["team"])
 def create_team(
     *, db: Database, name: Str32, tournament: InBody[ID], members: InBody[set[ID]]
 ) -> Team:
@@ -598,7 +598,7 @@ def create_team(
     return team_
 
 
-@admin.patch("/team/{id}", tags=["team"], name="edit")
+@admin.patch("/team/{id}", tags=["team"])
 def edit_team(
     *,
     db: Database,
@@ -642,7 +642,7 @@ def delete_team(*, db: Database, id: ID):
 # *******************************************************************************
 
 
-@router.get("/problem", tags=["problem"], name="get")
+@router.get("/problem", tags=["problem"])
 def get_problems(
     *,
     db: Database,
@@ -667,7 +667,7 @@ def get_problems(
     return encode(problems)
 
 
-@router.get("/problem/pagedata", tags=["problem"], name="pageData")
+@router.get("/problem/pagedata", tags=["problem"])
 def get_problem_page_data(*, db: Database, login: LoggedIn, id: ID) -> ProblemPageData | None:
     prob = db.scalars(
         select(Problem).where(Problem.id == id, Problem.visible_sql(login.team))
@@ -677,7 +677,7 @@ def get_problem_page_data(*, db: Database, login: LoggedIn, id: ID) -> ProblemPa
     return prob.page_data
 
 
-@admin.post("/problem", tags=["problem"], name="create")
+@admin.post("/problem", tags=["problem"])
 def create_problem(
     *,
     db: Database,
@@ -729,7 +729,7 @@ def create_problem(
     return f"/problems/{quote(prob.tournament.name, safe='')}/{quote(prob.name, safe='')}"
 
 
-@admin.patch("/problem/{id}", tags=["problem"], name="edit")
+@admin.patch("/problem/{id}", tags=["problem"])
 def edit_problem(
     *,
     db: Database,
@@ -785,7 +785,7 @@ def edit_problem(
     return problem
 
 
-@admin.delete("/problem/{id}", tags=["problem"], name="delete")
+@admin.delete("/problem/{id}", tags=["problem"])
 def delete_problem(*, db: Database, id: ID) -> bool:
     problem = unwrap(db.get(Problem, id))
     db.delete(problem)
@@ -798,7 +798,7 @@ def delete_problem(*, db: Database, id: ID) -> bool:
 # *******************************************************************************
 
 
-@router.put("/report/{problem}/{team}", tags=["report"], name="upload")
+@router.put("/report/{problem}/{team}", tags=["report"])
 def add_report(*, db: Database, login: LoggedIn, team: ID, problem: ID, file: UploadFile) -> Report:
     if file.size and ServerSettings.get(db).upload_file_limit < file.size:
         raise ValueError
@@ -817,7 +817,7 @@ def add_report(*, db: Database, login: LoggedIn, team: ID, problem: ID, file: Up
     return report
 
 
-@router.delete("/report/{problem}/{team}", tags=["report"], name="delete")
+@router.delete("/report/{problem}/{team}", tags=["report"])
 def delete_report(db: Database, login: LoggedIn, team: ID, problem: ID) -> None:
     if isinstance(login.team, Team) and team != login.team.id:
         raise HTTPException(403)
@@ -834,7 +834,7 @@ class Reports(BaseSchema):
     total: int
 
 
-@router.get("/report", tags=["report"], name="get")
+@router.get("/report", tags=["report"])
 def get_reports(
     db: Database,
     login: LoggedIn,
@@ -869,7 +869,7 @@ class ProgramResults(BaseSchema):
     total: int
 
 
-@router.get("/program", tags=["program"], name="get")
+@router.get("/program", tags=["program"])
 def search_program(
     *,
     db: Database,
@@ -913,7 +913,7 @@ def search_program(
     )
 
 
-@router.post("/program", tags=["program"], name="create")
+@router.post("/program", tags=["program"])
 def upload_program(
     *, db: Database, login: LoggedIn, name: str = "", role: Role, problem: ID, file: UploadFile
 ) -> Program:
@@ -930,7 +930,7 @@ def upload_program(
     return prog
 
 
-@router.delete("/program/{id}", tags=["program"], name="delete")
+@router.delete("/program/{id}", tags=["program"])
 def delete_program(*, db: Database, login: LoggedIn, id: ID) -> None:
     program = Program.get_unwrap(db, id)
     program.assert_editable(login.team)
@@ -948,7 +948,7 @@ class ScheduleInfo(BaseSchema):
     problems: dict[ID, schemas.Problem]
 
 
-@router.get("/match/schedule", tags=["match"], name="getScheduled")
+@router.get("/match/schedule", tags=["match"])
 def scheduled_matches(*, db: Database, login: LoggedIn) -> ScheduleInfo:
     matches = (
         db
@@ -967,7 +967,7 @@ def scheduled_matches(*, db: Database, login: LoggedIn) -> ScheduleInfo:
     )
 
 
-@admin.post("/match/schedule", tags=["match"], name="createSchedule")
+@admin.post("/match/schedule", tags=["match"])
 def create_schedule(
     *, db: Database, name: Str32 = "", time: datetime, problem: ID, points: int = 100
 ) -> ScheduledMatch:
@@ -978,7 +978,7 @@ def create_schedule(
     return schedule
 
 
-@admin.patch("/match/schedule/{id}", tags=["match"], name="editSchedule")
+@admin.patch("/match/schedule/{id}", tags=["match"])
 def edit_schedule(
     *,
     db: Database,
@@ -1001,7 +1001,7 @@ def edit_schedule(
     return match
 
 
-@admin.delete("/match/schedule/{id}", tags=["match"], name="deleteSchedule")
+@admin.delete("/match/schedule/{id}", tags=["match"])
 def delete_schedule(*, db: Database, id: ID) -> bool:
     match = unwrap(db.get(ScheduledMatch, id))
     db.delete(match)
@@ -1015,7 +1015,7 @@ class MatchResultData(BaseSchema):
     teams: dict[ID, schemas.Team]
 
 
-@router.get("/match/result", tags=["match"], name="getResult")
+@router.get("/match/result", tags=["match"])
 def results(
     *, db: Database, login: LoggedIn, problem: ID | None = None, tournament: ID | None = None
 ) -> MatchResultData:
@@ -1032,7 +1032,7 @@ def results(
     )
 
 
-@admin.delete("/match/result/{id}", tags=["match"], name="deleteResults")
+@admin.delete("/match/result/{id}", tags=["match"])
 def delete_results(*, db: Database, id: ID) -> None:
     result = MatchResult.get_unwrap(db, id)
     db.delete(result)
@@ -1040,7 +1040,7 @@ def delete_results(*, db: Database, id: ID) -> None:
 
 
 @admin.post(
-    "/match/result", tags=["match"], name="createResult", response_model=schemas.MatchResult
+    "/match/result", tags=["match"], response_model=schemas.MatchResult
 )
 def add_result(
     *,
@@ -1081,7 +1081,7 @@ def add_result(
 
 
 @admin.put(
-    "/match/result/{id}", tags=["match"], name="editResult", response_model=schemas.MatchResult
+    "/match/result/{id}", tags=["match"], response_model=schemas.MatchResult
 )
 def update_result(
     db: Database,
@@ -1129,7 +1129,7 @@ def update_result(
 
 
 @router.get(
-    "/extrapoints", tags=["extrapoints"], name="get", response_model=list[schemas.ExtraPoints]
+    "/extrapoints", tags=["extrapoints"], response_model=list[schemas.ExtraPoints]
 )
 def get_extra_points(
     db: Database, login: LoggedIn, tournament: UUID | None = None, tag: str | None = None
@@ -1142,7 +1142,7 @@ def get_extra_points(
     return sorted(db.scalars(select(ExtraPoints).where(*filters)).all(), key=lambda p: p.time)
 
 
-@admin.post("/extrapoints", tags=["extrapoints"], name="create")
+@admin.post("/extrapoints", tags=["extrapoints"])
 def create_extra_points(
     db: Database,
     time: InBody[datetime],
@@ -1158,7 +1158,7 @@ def create_extra_points(
     return new
 
 
-@admin.patch("/extrapoints/{id}", tags=["extrapoints"], name="edit")
+@admin.patch("/extrapoints/{id}", tags=["extrapoints"])
 def edit_extra_points(
     db: Database,
     id: UUID,
@@ -1183,7 +1183,7 @@ def edit_extra_points(
     return obj
 
 
-@admin.delete("/extrapoints/{id}", tags=["extrapoints"], name="delete")
+@admin.delete("/extrapoints/{id}", tags=["extrapoints"])
 def delete_extra_points(db: Database, id: UUID) -> None:
     points = ExtraPoints.get_unwrap(db, id)
     db.delete(points)

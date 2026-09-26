@@ -39,9 +39,9 @@ services:
       dockerfile: Dockerfile.dev
     stop_signal: SIGKILL
     volumes:
-      - ./frontend/public:/algobattle/public
-      - ./frontend/src:/algobattle/src
-      - ./frontend/typescript_client:/algobattle/typescript_client
+      - ./frontend/public/:/algobattle/public/
+      - ./frontend/src/:/algobattle/src/
+      - ./frontend/openapi.json:/algobattle/openapi.json
     ports:
       - 5173:5173
     depends_on:

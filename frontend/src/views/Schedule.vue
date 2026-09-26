@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { store, type ModelDict } from "@/shared";
-import { MatchService, TournamentService, ProblemService } from "@client";
+import { createSchedule, deleteSchedule as deleteScheduleRequest, editSchedule, getProblems, scheduledMatches } from "@client";
 import { Modal } from "bootstrap";
 import type { ScheduledMatch, Problem, Tournament } from "@client";
 import { computed, onMounted, ref, toRaw } from "vue";
@@ -23,12 +23,14 @@ const sortedMatches = computed(() => {
 
 let modal: Modal;
 onMounted(async () => {
-  const results = await MatchService.getScheduled();
-  problems.value = results.problems;
-  matches.value = results.matches;
+  const results = await scheduledMatches();
+  const data = results.data ?? { problems: {}, matches: {} } as any;
+  problems.value = (data.problems ?? {}) as ModelDict<Problem>;
+  matches.value = (data.matches ?? {}) as ModelDict<ScheduledMatch>;
   modal = Modal.getOrCreateInstance("#editModal");
   if (store.team == "admin") {
-    problems.value = await ProblemService.get({});
+    const problemResult = await getProblems({});
+    problems.value = (problemResult.data ?? {}) as ModelDict<Problem>;
   }
 });
 
@@ -44,7 +46,14 @@ const confirmDelete = ref<boolean>(false);
 async function sendData() {
   let newMatch;
   if (editData.value.id) {
-    newMatch = await MatchService.editSchedule({ id: editData.value.id, requestBody: editData.value });
+    const result = await editSchedule({
+      id: editData.value.id,
+      time: editData.value.time,
+      problem: editData.value.problem,
+      points: editData.value.points,
+      name: editData.value.name,
+    });
+    newMatch = result.data ?? null;
   } else {
     if (
       editData.value.time === undefined ||
@@ -53,19 +62,22 @@ async function sendData() {
     ) {
       return;
     }
-    newMatch = await MatchService.createSchedule({
-      requestBody: editData.value.name,
+    const result = await createSchedule({
       time: editData.value.time,
       problem: editData.value.problem,
       points: editData.value.points,
+      body: editData.value.name ?? "",
     });
+    newMatch = result.data ?? null;
   }
-  matches.value[newMatch.id] = newMatch;
+  if (newMatch) {
+    matches.value[(newMatch as ScheduledMatch).id] = newMatch as ScheduledMatch;
+  }
   modal.hide();
 }
 async function deleteMatch() {
   if (editData.value.id) {
-    await MatchService.deleteSchedule({ id: editData.value.id });
+    await deleteScheduleRequest({ id: editData.value.id });
     delete matches.value[editData.value.id];
     modal.hide();
   }

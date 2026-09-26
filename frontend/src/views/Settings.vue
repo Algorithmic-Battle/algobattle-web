@@ -2,13 +2,23 @@
 import { store, type ModelDict } from "@/shared";
 import {
   type Tournament,
-  TournamentService,
-  SettingsService,
-  type UserSettings,
-  type TeamSettings,
+  allTournaments,
+  editTeamSettings,
+  editUserSettings,
+  getServerSettings,
+  getTeamSettings,
+  getUserSettings,
   type ServerSettings,
-  ApiError,
 } from "@client";
+
+type UserSettings = {
+  selected_tournament?: Tournament | null;
+  [key: string]: any;
+};
+type TeamSettings = {
+  name?: string;
+  [key: string]: any;
+};
 import { onMounted, ref, watch } from "vue";
 
 const serverSettings = ref<ServerSettings>();
@@ -27,15 +37,19 @@ onMounted(async () => {
   if (!store.user) {
     return;
   }
-  serverSettings.value = await SettingsService.getServer();
+  const serverResult = await getServerSettings();
+  serverSettings.value = serverResult.data ?? undefined;
+  const userResult = await getUserSettings();
+  const teamResult = store.team instanceof Object ? await getTeamSettings() : undefined;
   settings.value = {
     email: store.user.email,
-    user: await SettingsService.getUser(),
+    user: (userResult.data ?? {}) as UserSettings,
     team_name: store.team instanceof Object ? store.team.name : undefined,
-    team: store.team instanceof Object ? await SettingsService.getTeam() : undefined,
+    team: (teamResult?.data ?? undefined) as TeamSettings | undefined,
   };
   if (store.user?.is_admin) {
-    tournaments.value = await TournamentService.get({});
+    const tournamentResult = await allTournaments();
+    tournaments.value = (tournamentResult.data ?? {}) as ModelDict<Tournament>;
   }
 });
 
@@ -44,19 +58,18 @@ async function saveEdit() {
     return;
   }
   try {
-    await SettingsService.editUser({
-      requestBody: {
-        email: settings.value.email,
-        tournament: settings.value.user.selected_tournament?.id,
-      }
+    await editUserSettings({
+      email: settings.value.email,
+      tournament: settings.value.user.selected_tournament?.id,
     });
     state.value = "success";
     store.user.email = settings.value.email;
-    store.tournament = settings.value.user.selected_tournament;
+    store.tournament = settings.value.user.selected_tournament ?? null;
   } catch (error) {
     state.value = {};
-    if (error instanceof ApiError && error.status == 409 && error.body.field == "email") {
-      state.value.email = true;
+    const err = error as { status?: number; body?: { field?: string } };
+    if (err.status === 409 && err.body?.field === "email") {
+      state.value = { email: true };
     }
   }
   if (settings.value.team_name || settings.value.team) {
@@ -64,7 +77,7 @@ async function saveEdit() {
       return;
     }
     try {
-      await SettingsService.editTeam({ requestBody: settings.value.team_name });
+      await editTeamSettings({ name: settings.value.team_name });
       store.team.name = settings.value.team_name;
       for (const team of store.user.teams) {
         if (team.id == store.team.id) {
@@ -75,8 +88,9 @@ async function saveEdit() {
       if (state.value == "success") {
         state.value = {};
       }
-      if (error instanceof ApiError && error.status == 409 && error.body.field == "name") {
-        state.value.name = true;
+      const err = error as { status?: number; body?: { field?: string } };
+      if (err.status === 409 && err.body?.field === "name") {
+        state.value = { name: true };
       }
     }
   }

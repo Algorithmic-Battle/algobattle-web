@@ -3,15 +3,14 @@ import { store, formatDateTime } from "@/shared";
 import { computed, onMounted, ref } from "vue";
 import {
   type Problem,
-  SettingsService,
-  ProblemService,
+  home,
+  getProblems,
   type ScheduledMatch,
-  MatchService,
-  ProgramService,
+  scheduledMatches,
+  searchProgram,
   type Program,
-  ReportService,
+  getReports,
   type Report,
-  type MatchResultData,
 } from "@client";
 import ProblemCard from "@/components/ProblemCard.vue";
 import ResultChart from "@/components/ResultChart.vue";
@@ -24,14 +23,16 @@ const generator = ref<Program>();
 const solver = ref<Program>();
 const report = ref<Report>();
 onMounted(async () => {
-  home_page.value = await SettingsService.home();
+  const homeResult = await home();
+  home_page.value = homeResult.data ?? null;
   if (!store.team) {
     return;
   }
-  const problems = await ProblemService.get({ tournament: store.tournament?.id });
+  const problemsResult = await getProblems({ tournament: store.tournament?.id });
+  const problems = (problemsResult.data ?? {}) as Record<string, Problem>;
   curr_prob.value = Object.values(problems)
-    .filter((p) => !p.end || DateTime.now() <= DateTime.fromISO(p.end))
-    .sort((a, b) => {
+    .filter((p: Problem) => !p.end || DateTime.now() <= DateTime.fromISO(p.end))
+    .sort((a: Problem, b: Problem) => {
       if (!a.end) {
         return 1;
       } else if (!b.end) {
@@ -40,36 +41,34 @@ onMounted(async () => {
         return a.end.localeCompare(b.end);
       }
     })[0];
-  if (!curr_prob) {
+  if (!curr_prob.value) {
     return;
   }
-  const schedules = await MatchService.getScheduled();
-  next_match.value = Object.values(schedules.matches)
-    .filter((m) => m.problem == curr_prob.value?.id && DateTime.now() <= DateTime.fromISO(m.time))
-    .sort((a, b) => a.time.localeCompare(b.time))[0];
+  const schedulesResult = await scheduledMatches();
+  const schedules = (schedulesResult.data ?? { matches: {} }) as { matches?: Record<string, ScheduledMatch> };
+  next_match.value = Object.values(schedules.matches ?? {})
+    .filter((m: ScheduledMatch) => m.problem == curr_prob.value?.id && DateTime.now() <= DateTime.fromISO(m.time))
+    .sort((a: ScheduledMatch, b: ScheduledMatch) => a.time.localeCompare(b.time))[0];
   if (store.team instanceof Object) {
-    const programs = await ProgramService.get({ team: store.team.id, problem: curr_prob.value.id });
-    var generators = Object.values(programs.programs).filter((p) => p.role == "generator");
-    var solvers = Object.values(programs.programs).filter((p) => p.role == "solver");
-    if (programs.total != generators.length + solvers.length) {
+    const programsResult = await searchProgram({ team: store.team.id, problem: curr_prob.value.id });
+    const programsData = (programsResult.data ?? { programs: {} }) as { programs?: Record<string, Program>; total?: number };
+    let generators = Object.values(programsData.programs ?? {}).filter((p: Program) => p.role == "generator");
+    let solvers = Object.values(programsData.programs ?? {}).filter((p: Program) => p.role == "solver");
+    if ((programsData.total ?? 0) != generators.length + solvers.length) {
       if (generators.length == 0) {
-        generators = Object.values(
-          (await ProgramService.get({ team: store.team.id, problem: curr_prob.value.id, role: "generator" }))
-            .programs
-        );
+        const generatorResult = await searchProgram({ team: store.team.id, problem: curr_prob.value.id, role: "generator" });
+        generators = Object.values(generatorResult.data?.programs ?? {});
       }
       if (solvers.length == 0) {
-        solvers = Object.values(
-          (await ProgramService.get({ team: store.team.id, problem: curr_prob.value.id, role: "solver" }))
-            .programs
-        );
+        const solverResult = await searchProgram({ team: store.team.id, problem: curr_prob.value.id, role: "solver" });
+        solvers = Object.values(solverResult.data?.programs ?? {});
       }
     }
-    generator.value = generators.sort((a, b) => b.creation_time.localeCompare(a.creation_time))[0];
-    solver.value = solvers.sort((a, b) => b.creation_time.localeCompare(a.creation_time))[0];
-    report.value = Object.values(
-      (await ReportService.get({ problem: curr_prob.value.id, team: store.team.id })).reports
-    )[0];
+    generator.value = generators.sort((a: Program, b: Program) => b.creation_time.localeCompare(a.creation_time))[0];
+    solver.value = solvers.sort((a: Program, b: Program) => b.creation_time.localeCompare(a.creation_time))[0];
+    const reportResult = await getReports({ problem: curr_prob.value.id, team: store.team.id });
+    const reportData = (reportResult.data ?? { reports: {} }) as { reports?: Record<string, Report> };
+    report.value = Object.values(reportData.reports ?? {})[0] as Report | undefined;
   }
 });
 function until(timestamp: string): string {
@@ -85,7 +84,9 @@ function until(timestamp: string): string {
         <ProblemCard :problem="curr_prob" />
         <table class="table" id="problem-data">
           <thead>
-            <th scope="col"></th>
+            <tr>
+              <th scope="col"></th>
+            </tr>
           </thead>
           <tbody>
             <tr v-if="curr_prob.end">

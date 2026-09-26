@@ -10,28 +10,26 @@ from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
+from fastapi.routing import APIRoute
+from sqlalchemy import URL, create_engine, text
 
 from algobattle_web.api import SchemaRoute, router as api
 from algobattle_web.models import Base, ServerSettings, User
 from algobattle_web.util import EnvConfig, PermissionExcpetion, SessionLocal, ValueTaken
 
 
-def database_exists(url: str) -> bool:
+def database_exists(url: URL) -> bool:
     """Checks whether the configured database already exists."""
-    db_url = make_url(url)
-    backend = db_url.get_backend_name()
+    backend = url.get_backend_name()
 
     if backend == "sqlite":
-        database = db_url.database
+        database = url.database
         if database in (None, ":memory:"):
             return True
         return Path(database).exists()
 
-    admin_url = db_url.set(database=None)
+    admin_url = url.set(database=None)
     try:
         with create_engine(admin_url).connect() as connection:
             if backend == "mysql":
@@ -40,13 +38,13 @@ def database_exists(url: str) -> bool:
                         "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA "
                         "WHERE SCHEMA_NAME = :name"
                     ),
-                    {"name": db_url.database},
+                    {"name": url.database},
                 ).scalar_one_or_none()
                 return exists is not None
             if backend == "postgresql":
                 exists = connection.execute(
                     text("SELECT 1 FROM pg_database WHERE datname = :name"),
-                    {"name": db_url.database},
+                    {"name": url.database},
                 ).scalar_one_or_none()
                 return exists is not None
     except Exception:
@@ -55,11 +53,10 @@ def database_exists(url: str) -> bool:
     return False
 
 
-def create_database(url: str) -> None:
+def create_database(url: URL) -> None:
     """Creates the configured database if it does not already exist."""
-    db_url = make_url(url)
-    backend = db_url.get_backend_name()
-    database_name = db_url.database
+    backend = url.get_backend_name()
+    database_name = url.database
 
     if backend == "sqlite":
         if database_name and database_name != ":memory:":
@@ -69,7 +66,7 @@ def create_database(url: str) -> None:
     if database_name is None:
         raise ValueError("A database name is required to create the database.")
 
-    admin_url = db_url.set(database=None)
+    admin_url = url.set(database=None)
     with create_engine(admin_url).connect() as connection:
         if backend == "mysql":
             connection.execute(text(f"CREATE DATABASE `{database_name}`"))
@@ -86,9 +83,8 @@ async def lifespan(app: FastAPI):
     SessionLocal.configure(bind=engine)
 
     # this creates the database itself, alembic/sqlalchemy code below creates the tables in it
-    url_string = str(engine.url)
-    if not database_exists(url_string):
-        create_database(url_string)
+    if not database_exists(engine.url):
+        create_database(engine.url)
 
     # because python packaged may be installed to eg zipfiles we need make sure all the data is actually on disk
     # however, that isn't easy here since alembic (presumably) expects a bunch of files in a certain structure.
@@ -120,23 +116,10 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+def generate_route_name(route: APIRoute) -> str:
+    return route.name
 
-
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    schema = get_openapi(
-        title="Algobattle",
-        version="0.1.0",
-        openapi_version="3.1.0",
-        routes=app.routes,
-    )
-    app.openapi_schema = schema
-    return schema
-
-
-app.openapi = custom_openapi
+app = FastAPI(lifespan=lifespan, generate_unique_id_function=generate_route_name)
 
 
 @app.exception_handler(RequestValidationError)

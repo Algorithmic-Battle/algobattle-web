@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import ProblemCard from "@/components/ProblemCard.vue";
 import { type ModelDict, store } from "@/shared";
-import { ProblemService } from "@client";
+import { getProblems } from "@client";
 import type { Problem } from "@client";
-import { computed, onMounted, ref, watch, type Ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 const problems = ref<ModelDict<Problem>>({});
 
@@ -11,7 +11,8 @@ watch(
   () => store.tournament,
   async (newTournament) => {
     if (newTournament) {
-      problems.value = await ProblemService.get({ tournament: newTournament.id });
+      const result = await getProblems({ tournament: newTournament.id });
+      problems.value = result.data ?? {};
     }
   },
   { immediate: true }

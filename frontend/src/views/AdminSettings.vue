@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { store } from "@/shared";
-import { type AdminServerSettings, SettingsService } from "@client";
+import { type AdminServerSettings, editServerSettings, getServerSettings } from "@client";
 import { onMounted, ref, watch } from "vue";
 
 const settings = ref<AdminServerSettings>();
@@ -9,7 +9,8 @@ const state = ref<"plain" | "success" | "error">("plain");
 watch(settings, () => (state.value = "plain"), { deep: true });
 
 onMounted(async () => {
-  settings.value = (await SettingsService.getServer()) as AdminServerSettings;
+  const result = await getServerSettings();
+  settings.value = (result.data ?? undefined) as AdminServerSettings | undefined;
   state.value = "plain";
 });
 
@@ -30,9 +31,13 @@ async function saveEdit() {
   }
   if (settings.value) {
     try {
-      await SettingsService.editServer({ requestBody: {...settings.value, upload_file_limit: settings.value.upload_file_limit_text} });
+      await editServerSettings({
+        ...settings.value,
+        upload_file_limit: settings.value.upload_file_limit_text,
+      });
       state.value = "success";
-      store.serverSettings = await SettingsService.getServer();
+      const serverResult = await getServerSettings();
+      store.serverSettings = serverResult.data ?? undefined;
     } catch {
       state.value = "error";
     }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import HoverBadgeVue from "@/components/HoverBadge.vue";
 import { Modal } from "bootstrap";
-import { TournamentService, TeamService, UserService } from "@client";
+import { allTournaments, createTeam, deleteTeam as deleteTeamRequest, editTeam, getTeams, searchUsers } from "@client";
 import type { Team, Tournament, User } from "@client";
 import { store, type ModelDict } from "@/shared";
 import { computed, onMounted, ref, toRaw, watch } from "vue";
@@ -20,7 +20,8 @@ const isFiltered = computed(() => {
 });
 let modal: Modal;
 onMounted(async () => {
-  tournaments.value = await TournamentService.get({});
+  const tournamentResult = await allTournaments();
+  tournaments.value = (tournamentResult.data ?? {}) as ModelDict<Tournament>;
   modal = Modal.getOrCreateInstance("#teamModal");
   await search();
 });
@@ -28,14 +29,15 @@ const total = ref(0);
 const offset = ref(0);
 
 async function search(offset: number = 0) {
-  const result = await TeamService.get({
+  const result = await getTeams({
     name: searchData.value.name || undefined,
     tournament: searchData.value.tournament || undefined,
-    offset: offset,
+    offset,
   });
-  teams.value = result.teams;
-  users.value = result.users;
-  total.value = result.total;
+  const data = result.data ?? { teams: {}, users: {}, total: 0 };
+  teams.value = data.teams ?? {};
+  users.value = data.users ?? {};
+  total.value = data.total ?? 0;
 }
 watch(offset, search);
 
@@ -77,11 +79,12 @@ function openModal(team: Team | undefined) {
   modal.show();
 }
 async function userSearch() {
-  const result = await UserService.searchUsers({
+  const result = await searchUsers({
     name: userSearchData.value.name || undefined,
     email: userSearchData.value.email || undefined,
   });
-  userSearchData.value.result = Object.values(result.users)
+  const usersData = result.data ?? { users: {} };
+  userSearchData.value.result = Object.values(usersData.users ?? {})
     .filter((u) => !editData.value.members.includes(u.id))
     .slice(0, 5);
   for (const user of userSearchData.value.result) {
@@ -97,25 +100,23 @@ async function sendData() {
       const oldMembers = teams.value[editData.value.id].members;
       const newMembers = editData.value.members.filter((id) => !oldMembers.includes(id));
       const deletedMembers = oldMembers.filter((id) => !editData.value.members.includes(id));
-      teams.value[editData.value.id] = await TeamService.edit({
+      const updatedTeam = await editTeam({
         id: editData.value.id,
         name: editData.value.name,
-        requestBody: {
-          tournament: editData.value.tournament?.id,
-          members: Object.fromEntries(
-            newMembers.map((id) => [id, "add"]).concat(deletedMembers.map((id) => [id, "remove"]))
-          ),
-        },
+        body: Object.fromEntries(
+          newMembers.map((id) => [id, "add"]).concat(deletedMembers.map((id) => [id, "remove"]))
+        ),
+        tournament: editData.value.tournament?.id,
       });
+      teams.value[editData.value.id] = (updatedTeam.data ?? teams.value[editData.value.id]) as Team;
     } else {
-      const newTeam = await TeamService.create({
-        requestBody: {
-          name: editData.value.name,
-          tournament: editData.value.tournament!.id,
-          members: editData.value.members,
-        },
+      const newTeam = await createTeam({
+        tournament: editData.value.tournament!.id,
+        members: editData.value.members,
+        body: editData.value.name,
       });
-      teams.value[newTeam.id] = newTeam;
+      const created = newTeam.data ?? { id: "", name: editData.value.name, tournament: editData.value.tournament ?? null, members: editData.value.members };
+      teams.value[created.id] = created as Team;
     }
     modal.hide();
   } catch {
@@ -129,17 +130,18 @@ async function deleteTeam() {
   } else {
     confirmDelete.value = false;
   }
-  await TeamService.deleteTeam({ id: editData.value.id });
+  await deleteTeamRequest({ id: editData.value.id });
   delete teams.value[editData.value.id];
   modal.hide();
 }
 async function checkName() {
-  const result = await TeamService.get({
+  const result = await getTeams({
     name: editData.value.name,
     tournament: editData.value.tournament?.id,
   });
-  const teams = Object.values(result.teams).filter((team) => team.name === editData.value.name);
-  if (teams.length != 0 && teams[0].id != editData.value.id) {
+  const teamData = result.data ?? { teams: {} };
+  const teamsList = Object.values(teamData.teams ?? {}).filter((team) => team.name === editData.value.name);
+  if (teamsList.length != 0 && teamsList[0].id != editData.value.id) {
     error.value = "name";
   } else {
     error.value = "";

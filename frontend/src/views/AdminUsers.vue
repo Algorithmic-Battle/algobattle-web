@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import HoverBadgeVue from "@/components/HoverBadge.vue";
 import Paginator from "@/components/Paginator.vue";
-import { TournamentService, TeamService, UserService, type Team, type User, type Tournament } from "@client";
+import {
+  allTournaments,
+  createUser,
+  deleteUser as deleteUserRequest,
+  editUser,
+  getTeams,
+  searchUsers,
+  type Team,
+  type User,
+  type Tournament,
+} from "@client";
 import { Modal } from "bootstrap";
 import type { ModelDict } from "@/shared";
 import { computed, onMounted, ref, toRaw, watch } from "vue";
@@ -30,19 +40,21 @@ const isFiltered = computed(() => {
   );
 });
 onMounted(async () => {
-  tournaments.value = await TournamentService.get({});
+  const tournamentResult = await allTournaments();
+  tournaments.value = (tournamentResult.data ?? {}) as ModelDict<Tournament>;
   modal = Modal.getOrCreateInstance("#userModal");
   search();
 });
 async function search(offset: number = 0) {
-  const result = await UserService.searchUsers({
+  const result = await searchUsers({
     name: filterData.value.name || undefined,
     tournament: filterData.value.tournament || undefined,
-    offset: offset,
+    offset,
   });
-  teams.value = result.teams;
-  users.value = result.users;
-  total.value = result.total;
+  const data = result.data ?? { teams: {}, users: {}, total: 0 };
+  teams.value = data.teams ?? {};
+  users.value = data.users ?? {};
+  total.value = data.total ?? 0;
 }
 async function clearSearch() {
   filterData.value = {
@@ -95,11 +107,12 @@ function openModal(user: User | undefined) {
   modal.show();
 }
 async function searchTeam() {
-  const result = await TeamService.get({
+  const result = await getTeams({
     name: teamSearchData.value.name || undefined,
     tournament: teamSearchData.value.tournament || undefined,
   });
-  teamSearchData.value.result = Object.values(result.teams)
+  const data = result.data ?? { teams: {} };
+  teamSearchData.value.result = Object.values(data.teams ?? {})
     .filter((team) => !editData.value.teams.includes(team))
     .slice(0, 5);
 }
@@ -112,9 +125,9 @@ async function sendData() {
     const newTeams = editData.value.teams.filter((team) => !oldTeams.includes(team.id));
     const removedTeams = oldTeams.filter((id) => !editData.value.teams.map((t) => t.id).includes(id));
     try {
-      users.value[editData.value.id] = await UserService.editUser({
+      const result = await editUser({
         id: editData.value.id,
-        requestBody: {
+        editUser: {
           name: editData.value.name,
           email: editData.value.email,
           is_admin: editData.value.is_admin,
@@ -123,19 +136,21 @@ async function sendData() {
           ),
         },
       });
+      users.value[editData.value.id] = (result.data ?? users.value[editData.value.id]) as User;
     } catch {
       error.value = "email";
     }
   } else {
     try {
-      const newUser = await UserService.createUser({
-        requestBody: {
+      const result = await createUser({
+        createUser: {
           name: editData.value.name,
           email: editData.value.email,
           is_admin: editData.value.is_admin,
           teams: editData.value.teams.map((t) => t.id),
         },
       });
+      const newUser = (result.data ?? { ...emptyUser(), id: "" }) as User;
       users.value[newUser.id] = newUser;
     } catch {
       error.value = "email";
@@ -150,16 +165,17 @@ async function deleteUser() {
   } else {
     confirmDelete.value = false;
   }
-  await UserService.deleteUser({ id: editData.value.id });
+  await deleteUserRequest({ id: editData.value.id });
   delete users.value[editData.value.id];
   modal.hide();
 }
 async function checkEmail() {
-  const result = await UserService.searchUsers({
+  const result = await searchUsers({
     email: editData.value.email,
-    exactSearch: true,
+    exact_search: true,
   });
-  const userIds = Object.keys(result.teams);
+  const data = result.data ?? { teams: {} };
+  const userIds = Object.keys(data.teams ?? {});
   if (userIds.length != 0 && userIds[0] != editData.value.id) {
     console.log(editData.value);
     error.value = "email";

@@ -8,15 +8,9 @@ from algobattle.match import AlgobattleConfig, Match, ProjectConfig, TeamInfo
 from algobattle.util import ExceptionInfo, Role, TempDir
 from anyio import run
 from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
 
-from algobattle_web.models import (
-    File,
-    MatchResult,
-    Program,
-    ResultParticipant,
-    ScheduledMatch,
-    Session,
-)
+from algobattle_web.models import File, MatchResult, Program, ResultParticipant, ScheduledMatch
 from algobattle_web.util import EnvConfig, MatchStatus, SessionLocal, install_packages
 
 

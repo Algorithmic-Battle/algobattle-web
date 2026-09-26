@@ -4,8 +4,9 @@ from typing import Annotated, Literal, Self
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
+from sqlalchemy.orm import Session
 
-from algobattle_web.models import Session, Team, Tournament, User
+from algobattle_web.models import Team, Tournament, User
 from algobattle_web.util import SessionLocal
 
 

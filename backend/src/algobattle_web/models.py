@@ -174,15 +174,13 @@ class RawBase(MappedAsDataclass, DeclarativeBase):
         kw_only: _NoArg | bool = _NoArg.NO_ARG,
         dataclass_callable: _NoArg | Callable[..., type] = _NoArg.NO_ARG,
     ) -> None:
+        if getattr(cls, "__tablename___", None) is None:
+            cls.__tablename__ = cls.__name__.lower() + "s"
+        if not hasattr(cls, "Schema"):
+            cls.Schema = getattr(schemas, cls.__name__)
         super().__init_subclass__(
             init, repr, eq, order, unsafe_hash, match_args, kw_only, dataclass_callable
         )
-        del cls.__dataclass_fields__
-
-    @classmethod
-    @property
-    def __tablename__(cls):
-        return cls.__name__.lower() + "s"
 
     def encode(self) -> BaseSchema:
         return self.Schema.model_validate(self)
@@ -397,8 +395,6 @@ class UserSettings(Base):
         ForeignKey("tournaments.id"), init=False
     )
 
-    Schema = schemas.UserSettings
-
 
 class User(Base):
     """A user object."""
@@ -406,7 +402,7 @@ class User(Base):
     email: Mapped[str128] = mapped_column(unique=True)
     name: Mapped[str32]
     is_admin: Mapped[bool] = mapped_column(default=False)
-    settings: Mapped[UserSettings] = relationship(default_factory=UserSettings)
+    settings: Mapped[UserSettings] = relationship(default=None)
 
     teams: Mapped[list[Team]] = relationship(
         secondary=team_members, back_populates="members", lazy="joined", default_factory=list
@@ -414,7 +410,9 @@ class User(Base):
     token_id: Mapped[ID] = mapped_column(default_factory=uuid4, init=False)
     settings_id: Mapped[UUID] = mapped_column(ForeignKey("usersettingss.id"), init=False)
 
-    Schema = schemas.User
+    def __post_init__(self) -> None:
+        if self.settings is None: # type: ignore
+            self.settings = UserSettings()
 
     @property
     def logged_in(self) -> LoggedIn:
@@ -494,8 +492,6 @@ class Tournament(Base, PermissionCheck):
 
     teams: Mapped[list[Team]] = relationship(back_populates="tournament", init=False)
 
-    Schema = schemas.Tournament
-
     @classmethod
     def get(cls, db: Session, identifier: str | ID) -> Self | None:
         """Queries the database for the tournament with the given id or name."""
@@ -515,8 +511,6 @@ class Tournament(Base, PermissionCheck):
 class TeamSettings(Base):
     """Settings for each team."""
 
-    schema = schemas.TeamSettings
-
 
 class Team(Base):
     name: Mapped[str32]
@@ -527,12 +521,14 @@ class Team(Base):
     members: Mapped[list[User]] = relationship(
         secondary=team_members, back_populates="teams", lazy="joined", default_factory=list
     )
-    settings: Mapped[TeamSettings] = relationship(default_factory=TeamSettings)
+    settings: Mapped[TeamSettings] = relationship(default=None)
     settings_id: Mapped[UUID] = mapped_column(ForeignKey("teamsettingss.id"), init=False)
 
     __table_args__ = (UniqueConstraint("name", "tournament_id"),)
 
-    Schema = schemas.Team
+    def __post_init__(self) -> None:
+        if self.settings is None: # type: ignore
+            self.settings = TeamSettings()
 
     def __str__(self) -> str:
         return self.name
@@ -593,7 +589,6 @@ class Problem(Base, PermissionCheck):
     page_data: Mapped[ProblemPageData | None] = mapped_column(default=None)
 
     __table_args__ = (UniqueConstraint("name", "tournament_id"),)
-    Schema = schemas.Problem
 
     @property
     def link(self) -> str:
@@ -653,7 +648,6 @@ class Report(Base, PermissionCheck):
     file_id: Mapped[ID] = mapped_column(ForeignKey("files.id"), init=False)
 
     __table_args__ = (UniqueConstraint("team_id", "problem_id"),)
-    Schema = schemas.Report
 
     def _visible(self, team: Team) -> bool:
         return self.team == team and self.problem.visible(team)
@@ -684,8 +678,6 @@ class Program(Base, PermissionCheck):
     creation_time: Mapped[datetime] = mapped_column(default_factory=datetime.now)
     user_editable: Mapped[bool] = mapped_column(default=True)
 
-    Schema = schemas.Program
-
     def _visible(self, team: Team) -> bool:
         return self.team == team
 
@@ -702,8 +694,7 @@ class Program(Base, PermissionCheck):
 
 
 class ScheduledMatch(Base):
-    __tablename__ = "scheduledmatches"  # type: ignore
-    Schema = schemas.ScheduledMatch
+    __tablename__ = "scheduledmatches"
 
     time: Mapped[datetime]
     problem: Mapped[Problem] = relationship()
@@ -737,7 +728,7 @@ class MatchResult(Base, PermissionCheck):
     problem: Mapped[Problem] = relationship()
     problem_id: Mapped[ID] = mapped_column(ForeignKey(Problem.id), init=False)
     participants: Mapped[set[ResultParticipant]] = relationship(
-        default=set, cascade="all, delete-orphan"
+        default_factory=set, cascade="all, delete-orphan"
     )
     logs_id: Mapped[ID | None] = mapped_column(ForeignKey("files.id"), init=False)
     logs: Mapped[File | None] = relationship(
@@ -748,8 +739,6 @@ class MatchResult(Base, PermissionCheck):
         lazy="selectin",
     )
 
-    Schema = schemas.MatchResult
-
     def _visible(self, team: Team) -> bool:
         return any(team == p.team for p in self.participants)
 
@@ -759,8 +748,7 @@ class MatchResult(Base, PermissionCheck):
 
 
 class ExtraPoints(Base, PermissionCheck):
-    __tablename__ = "extrapoints"  # type: ignore
-    Schema = schemas.ExtraPoints
+    __tablename__ = "extrapoints"
 
     time: Mapped[datetime]
     tag: Mapped[str32]

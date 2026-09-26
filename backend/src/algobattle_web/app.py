@@ -1,6 +1,7 @@
 import json
 from contextlib import asynccontextmanager
 from importlib.resources import as_file, files
+from pathlib import Path
 
 from alembic.command import stamp, upgrade
 from alembic.config import Config
@@ -11,12 +12,72 @@ from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
-from sqlalchemy import create_engine
-from sqlalchemy_utils.functions import create_database, database_exists
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
 from algobattle_web.api import SchemaRoute, router as api
 from algobattle_web.models import Base, ServerSettings, User
 from algobattle_web.util import EnvConfig, PermissionExcpetion, SessionLocal, ValueTaken
+
+
+def database_exists(url: str) -> bool:
+    """Checks whether the configured database already exists."""
+    db_url = make_url(url)
+    backend = db_url.get_backend_name()
+
+    if backend == "sqlite":
+        database = db_url.database
+        if database in (None, ":memory:"):
+            return True
+        return Path(database).exists()
+
+    admin_url = db_url.set(database=None)
+    try:
+        with create_engine(admin_url).connect() as connection:
+            if backend == "mysql":
+                exists = connection.execute(
+                    text(
+                        "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA "
+                        "WHERE SCHEMA_NAME = :name"
+                    ),
+                    {"name": db_url.database},
+                ).scalar_one_or_none()
+                return exists is not None
+            if backend == "postgresql":
+                exists = connection.execute(
+                    text("SELECT 1 FROM pg_database WHERE datname = :name"),
+                    {"name": db_url.database},
+                ).scalar_one_or_none()
+                return exists is not None
+    except Exception:
+        return False
+
+    return False
+
+
+def create_database(url: str) -> None:
+    """Creates the configured database if it does not already exist."""
+    db_url = make_url(url)
+    backend = db_url.get_backend_name()
+    database_name = db_url.database
+
+    if backend == "sqlite":
+        if database_name and database_name != ":memory:":
+            Path(database_name).parent.mkdir(parents=True, exist_ok=True)
+        return
+
+    if database_name is None:
+        raise ValueError("A database name is required to create the database.")
+
+    admin_url = db_url.set(database=None)
+    with create_engine(admin_url).connect() as connection:
+        if backend == "mysql":
+            connection.execute(text(f"CREATE DATABASE `{database_name}`"))
+        elif backend == "postgresql":
+            connection.execute(text(f'CREATE DATABASE "{database_name}"'))
+        else:
+            raise ValueError(f"Unsupported database backend: {backend}")
+        connection.commit()
 
 
 @asynccontextmanager
@@ -25,8 +86,9 @@ async def lifespan(app: FastAPI):
     SessionLocal.configure(bind=engine)
 
     # this creates the database itself, alembic/sqlalchemy code below creates the tables in it
-    if not database_exists(engine.url):
-        create_database(engine.url)
+    url_string = str(engine.url)
+    if not database_exists(url_string):
+        create_database(url_string)
 
     # because python packaged may be installed to eg zipfiles we need make sure all the data is actually on disk
     # however, that isn't easy here since alembic (presumably) expects a bunch of files in a certain structure.

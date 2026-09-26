@@ -20,6 +20,7 @@ from fastapi.routing import APIRoute
 from pydantic import ByteSize, Field, TypeAdapter, WithJsonSchema
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from algobattle_web import schemas
 from algobattle_web.dependencies import CurrUser, Database, LoggedIn, check_if_admin, get_db
@@ -35,7 +36,6 @@ from algobattle_web.models import (
     ResultParticipant,
     ScheduledMatch,
     ServerSettings,
-    Session,
     Team,
     TeamSettings,
     Tournament,

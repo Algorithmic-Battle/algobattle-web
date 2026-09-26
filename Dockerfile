@@ -1,4 +1,4 @@
-FROM python:3.11 as api_builder
+FROM python:3.14 as api_builder
 WORKDIR /code
 COPY backend .
 RUN pip install .

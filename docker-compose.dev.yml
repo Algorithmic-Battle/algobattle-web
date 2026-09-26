@@ -12,7 +12,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     volumes:
-      - ./backend/algobattle_web:/algobattle/algobattle_web
+      - ./backend/src/algobattle_web:/algobattle/algobattle_web
     ports:
       - 8000:8000
     depends_on:
@@ -28,7 +28,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     volumes:
-      - ./backend/algobattle_web:/algobattle/algobattle_web
+      - ./backend/src/algobattle_web:/algobattle/algobattle_web
     depends_on:
       database:
         condition: service_healthy

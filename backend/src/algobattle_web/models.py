@@ -1,41 +1,64 @@
 "Database models"
+
+import contextlib
 from abc import abstractmethod
-from datetime import timedelta, datetime
-from secrets import token_bytes
-from typing import IO, Callable, ClassVar, Iterable, Any, TypeAlias, BinaryIO, Literal, Self, cast, overload, Annotated, Sequence
-from typing_extensions import TypedDict
-from uuid import UUID, uuid4
+from collections.abc import Callable, Iterable, Sequence
+from datetime import datetime, timedelta
 from pathlib import Path
-from shutil import copyfileobj, copyfile, move
+from secrets import token_bytes
+from shutil import copyfile, copyfileobj, move
+from typing import IO, Annotated, Any, BinaryIO, ClassVar, Literal, Self, cast, overload
+from uuid import UUID, uuid4
 from zipfile import ZipFile
 
+from algobattle.match import AlgobattleConfig
+from algobattle.util import Role as ProgramRole, TempDir
+from fastapi import UploadFile
 from jose import jwt
 from jose.exceptions import ExpiredSignatureError, JWTError
-from sqlalchemy import JSON, ColumnElement, LargeBinary, MetaData, Table, ForeignKey, Column, select, DateTime, inspect, String, Text
-from sqlalchemy.event import listens_for
-from sqlalchemy.sql import true as sql_true, false as sql_false
-from sqlalchemy.orm import relationship, Mapped, mapped_column, Session, DeclarativeBase, registry, MappedAsDataclass
-from sqlalchemy.schema import UniqueConstraint
-from sqlalchemy.sql.base import _NoArg
-from fastapi import UploadFile
 from pydantic import ByteSize, Field
+from sqlalchemy import (
+    JSON,
+    Column,
+    ColumnElement,
+    DateTime,
+    ForeignKey,
+    LargeBinary,
+    MetaData,
+    String,
+    Table,
+    Text,
+    inspect,
+    select,
+)
+from sqlalchemy.event import listens_for
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    MappedAsDataclass,
+    Session,
+    mapped_column,
+    registry,
+    relationship,
+)
+from sqlalchemy.schema import UniqueConstraint
+from sqlalchemy.sql import false as sql_false, true as sql_true
+from sqlalchemy.sql.base import _NoArg
+from typing_extensions import TypedDict
 
-from algobattle.util import TempDir, Role as ProgramRole
-from algobattle.match import AlgobattleConfig
 from algobattle_web import schemas
 from algobattle_web.util import (
     BaseSchema,
     EmailConfig,
     MatchStatus,
     PermissionExcpetion,
+    SessionLocal,
     SqlableModel,
     guess_mimetype,
-    SessionLocal,
     install_packages,
     render_text,
     unwrap,
 )
-
 
 ID = UUID
 str32 = Annotated[str, mapped_column(String(32)), Field(max_length=32)]
@@ -43,26 +66,25 @@ str64 = Annotated[str, mapped_column(String(64)), Field(max_length=64)]
 str128 = Annotated[str, mapped_column(String(128)), Field(max_length=128)]
 str256 = Annotated[str, mapped_column(String(256)), Field(max_length=256)]
 strText = Annotated[str, mapped_column(Text)]
-LoggedIn: TypeAlias = "Team | Literal['admin'] | None"
+type LoggedIn = Team | Literal["admin"] | None
 
 
 # cant make it an ABC because of metaclass issues
 class PermissionCheck:
-
     @abstractmethod
-    def _visible(self, team: "Team") -> bool:
+    def _visible(self, team: Team) -> bool:
         raise NotImplementedError
 
     @classmethod
     @abstractmethod
-    def _visible_sql(cls, team: "Team") -> ColumnElement[bool]:
+    def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
         raise NotImplementedError
 
-    def _editable(self, team: "Team") -> bool:
+    def _editable(self, team: Team) -> bool:
         return self._visible(team)
 
     @classmethod
-    def _editable_sql(cls, team: "Team") -> ColumnElement[bool]:
+    def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
         return cls._visible_sql(team)
 
     def visible(self, team: LoggedIn) -> bool:
@@ -152,7 +174,9 @@ class RawBase(MappedAsDataclass, DeclarativeBase):
         kw_only: _NoArg | bool = _NoArg.NO_ARG,
         dataclass_callable: _NoArg | Callable[..., type] = _NoArg.NO_ARG,
     ) -> None:
-        super().__init_subclass__(init, repr, eq, order, unsafe_hash, match_args, kw_only, dataclass_callable)
+        super().__init_subclass__(
+            init, repr, eq, order, unsafe_hash, match_args, kw_only, dataclass_callable
+        )
         del cls.__dataclass_fields__
 
     @classmethod
@@ -174,7 +198,9 @@ class Base(RawBase):
 
     __abstract__ = True
 
-    id: Mapped[UUID] = mapped_column(default_factory=uuid4, primary_key=True, init=False, autoincrement=False)
+    id: Mapped[UUID] = mapped_column(
+        default_factory=uuid4, primary_key=True, init=False, autoincrement=False
+    )
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -200,20 +226,24 @@ class File(Base):
 
     @overload
     @classmethod
-    def from_file(cls, file: BinaryIO, filename: str, *, media_type: str | None = None, alt_text: str = "") -> Self:
-        ...
+    def from_file(
+        cls, file: BinaryIO, filename: str, *, media_type: str | None = None, alt_text: str = ""
+    ) -> Self: ...
 
     @overload
     @classmethod
-    def from_file(cls, file: UploadFile, *, alt_text: str = "") -> Self:
-        ...
+    def from_file(cls, file: UploadFile, *, alt_text: str = "") -> Self: ...
 
     @overload
     @classmethod
     def from_file(
-        cls, file: Path, *, media_type: str | None = None, alt_text: str = "", action: Literal["move", "copy"]
-    ) -> Self:
-        ...
+        cls,
+        file: Path,
+        *,
+        media_type: str | None = None,
+        alt_text: str = "",
+        action: Literal["move", "copy"],
+    ) -> Self: ...
 
     @classmethod
     def from_file(
@@ -283,13 +313,13 @@ class File(Base):
                     case "copy":
                         copyfile(self._file, self.path)
             else:
-                with open(self.path, "wb+") as target:
+                with self.path.open("wb+") as target:
                     copyfileobj(self._file, target)
             self._file = None
 
     def open(self, mode: str = "rb") -> IO[Any]:
         """Opens the underlying file object."""
-        return open(self.path, mode)
+        return self.path.open(mode)
 
 
 @listens_for(File, "after_insert")
@@ -326,8 +356,12 @@ def encode(col: Iterable[Base]) -> dict[ID, Any]:
 class ServerSettings(Base, kw_only=True):
     """Singleton table for server wide settings."""
 
-    secret_key: Mapped[bytes] = mapped_column(LargeBinary(64), default_factory=lambda: token_bytes(64))
-    email_config: Mapped[EmailConfig] = mapped_column(SqlableModel(EmailConfig), default_factory=EmailConfig)
+    secret_key: Mapped[bytes] = mapped_column(
+        LargeBinary(64), default_factory=lambda: token_bytes(64)
+    )
+    email_config: Mapped[EmailConfig] = mapped_column(
+        SqlableModel(EmailConfig), default_factory=EmailConfig
+    )
     home_page: Mapped[File | None] = relationship(default=None)
     user_change_email: Mapped[bool] = mapped_column(default=True)
     team_change_name: Mapped[bool] = mapped_column(default=True)
@@ -355,11 +389,13 @@ team_members = Table(
 class UserSettings(Base):
     """Settings for each user."""
 
-    selected_team: Mapped["Team | None"] = relationship(lazy="joined", default=None)
-    selected_tournament: "Mapped[Tournament | None]" = relationship(lazy="joined", default=None)
+    selected_team: Mapped[Team | None] = relationship(lazy="joined", default=None)
+    selected_tournament: Mapped[Tournament | None] = relationship(lazy="joined", default=None)
 
     selected_team_id: Mapped[UUID | None] = mapped_column(ForeignKey("teams.id"), init=False)
-    selected_tournament_id: Mapped[UUID | None] = mapped_column(ForeignKey("tournaments.id"), init=False)
+    selected_tournament_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("tournaments.id"), init=False
+    )
 
     Schema = schemas.UserSettings
 
@@ -372,7 +408,7 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(default=False)
     settings: Mapped[UserSettings] = relationship(default_factory=UserSettings)
 
-    teams: Mapped[list["Team"]] = relationship(
+    teams: Mapped[list[Team]] = relationship(
         secondary=team_members, back_populates="members", lazy="joined", default_factory=list
     )
     token_id: Mapped[ID] = mapped_column(default_factory=uuid4, init=False)
@@ -381,7 +417,7 @@ class User(Base):
     Schema = schemas.User
 
     @property
-    def logged_in(self) -> "Team | Literal['admin'] | None":
+    def logged_in(self) -> LoggedIn:
         if self.settings.selected_team is not None:
             return self.settings.selected_team
         elif self.is_admin:
@@ -390,7 +426,7 @@ class User(Base):
             return None
 
     @property
-    def tournament(self) -> "Tournament | None":
+    def tournament(self) -> Tournament | None:
         match self.logged_in:
             case Team(tournament=t):
                 return t
@@ -428,7 +464,7 @@ class User(Base):
                 user = cls.get(db, user_id)
                 if user is not None and user.token_id == token_id:
                     return user
-        except (JWTError, ExpiredSignatureError, NameError):
+        except JWTError, ExpiredSignatureError, NameError:
             return
 
     def login_token(self, db: Session, lifetime: timedelta = timedelta(hours=1)) -> str:
@@ -447,7 +483,7 @@ class User(Base):
                 user = cls.get(db, cast(str, payload["email"]))
                 if user is not None:
                     return user
-        except (ExpiredSignatureError, JWTError, NameError):
+        except ExpiredSignatureError, JWTError, NameError:
             pass
         raise ValueError
 
@@ -456,7 +492,7 @@ class Tournament(Base, PermissionCheck):
     name: Mapped[str32] = mapped_column(unique=True)
     time: Mapped[datetime] = mapped_column(default_factory=datetime.now, init=False)
 
-    teams: "Mapped[list[Team]]" = relationship(back_populates="tournament", init=False)
+    teams: Mapped[list[Team]] = relationship(back_populates="tournament", init=False)
 
     Schema = schemas.Tournament
 
@@ -468,11 +504,11 @@ class Tournament(Base, PermissionCheck):
         else:
             return db.scalars(select(cls).filter(cls.name == identifier)).first()
 
-    def _visible(self, team: "Team") -> bool:
+    def _visible(self, team: Team) -> bool:
         return team.tournament_id == self.id
 
     @classmethod
-    def _visible_sql(cls, team: "Team") -> ColumnElement[bool]:
+    def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
         return Tournament.id == team.tournament_id
 
 
@@ -484,7 +520,9 @@ class TeamSettings(Base):
 
 class Team(Base):
     name: Mapped[str32]
-    tournament: Mapped[Tournament] = relationship(back_populates="teams", uselist=False, lazy="joined")
+    tournament: Mapped[Tournament] = relationship(
+        back_populates="teams", uselist=False, lazy="joined"
+    )
     tournament_id: Mapped[ID] = mapped_column(ForeignKey("tournaments.id"), init=False)
     members: Mapped[list[User]] = relationship(
         secondary=team_members, back_populates="teams", lazy="joined", default_factory=list
@@ -512,15 +550,23 @@ class Team(Base):
         ...
 
     @classmethod
-    def get(cls, db: Session, identifier: str | ID, tournament: Tournament | None = None) -> Self | None:
+    def get(
+        cls, db: Session, identifier: str | ID, tournament: Tournament | None = None
+    ) -> Self | None:
         """Queries the database for the team with the given id or name and tournament."""
         if isinstance(identifier, UUID):
             return db.get(cls, identifier)
         else:
             if tournament is None:
-                raise ValueError("If the team is given by its name, you have to specify a tournament!")
-            return db.query(cls).filter(cls.name == identifier, cls.tournament_id == tournament.id).first()
-
+                raise ValueError(
+                    "If the team is given by its name, you have to specify a tournament!"
+                )
+            return (
+                db
+                .query(cls)
+                .filter(cls.name == identifier, cls.tournament_id == tournament.id)
+                .first()
+            )
 
 
 class Problem(Base, PermissionCheck):
@@ -537,7 +583,11 @@ class Problem(Base, PermissionCheck):
     end: Mapped[datetime | None] = mapped_column(default=None)
     description: Mapped[str256] = mapped_column(default="")
     image: Mapped[File | None] = relationship(
-        default=None, foreign_keys=image_id, cascade="all, delete-orphan", single_parent=True, lazy="selectin"
+        default=None,
+        foreign_keys=image_id,
+        cascade="all, delete-orphan",
+        single_parent=True,
+        lazy="selectin",
     )
     colour: Mapped[str] = mapped_column(String(7), default="#FFFFFF")
     page_data: Mapped[ProblemPageData | None] = mapped_column(default=None)
@@ -550,14 +600,18 @@ class Problem(Base, PermissionCheck):
         return f"/problems/{self.tournament.name}/{self.name}"
 
     def _visible(self, team: Team) -> bool:
-        return team.tournament == self.tournament and (self.start is None or self.start <= datetime.now())
+        return team.tournament == self.tournament and (
+            self.start is None or self.start <= datetime.now()
+        )
 
     @classmethod
     def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
-        return (Problem.tournament_id == team.tournament_id) & (Problem.start.is_(None) | (Problem.start <= datetime.now()))
+        return (Problem.tournament_id == team.tournament_id) & (
+            Problem.start.is_(None) | (Problem.start <= datetime.now())
+        )
 
     def _editable(self, team: Team) -> bool:
-        return (self.end is None or self.end >= datetime.now())
+        return self.end is None or self.end >= datetime.now()
 
     @classmethod
     def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
@@ -571,10 +625,8 @@ class Problem(Base, PermissionCheck):
                 spec.extractall(folder)
             config = AlgobattleConfig.from_file(folder)
 
-            try:
+            with contextlib.suppress(RuntimeError):
                 install_packages(config.problem.dependencies)
-            except RuntimeError:
-                pass
             try:
                 desc_path = next(folder.glob("description.*"))
                 desc = render_text(desc_path.read_text(), guess_mimetype(desc_path))
@@ -595,7 +647,9 @@ class Report(Base, PermissionCheck):
     team_id: Mapped[ID] = mapped_column(ForeignKey("teams.id"), init=False)
     problem: Mapped[Problem] = relationship(lazy="joined")
     problem_id: Mapped[ID] = mapped_column(ForeignKey("problems.id"), init=False)
-    file: Mapped[File] = relationship(cascade="all, delete-orphan", single_parent=True, lazy="selectin")
+    file: Mapped[File] = relationship(
+        cascade="all, delete-orphan", single_parent=True, lazy="selectin"
+    )
     file_id: Mapped[ID] = mapped_column(ForeignKey("files.id"), init=False)
 
     __table_args__ = (UniqueConstraint("team_id", "problem_id"),)
@@ -621,7 +675,9 @@ class Program(Base, PermissionCheck):
     team: Mapped[Team] = relationship(lazy="joined")
     team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"), init=False)
     role: Mapped[ProgramRole]
-    file: Mapped[File] = relationship(cascade="all, delete-orphan", single_parent=True, lazy="selectin")
+    file: Mapped[File] = relationship(
+        cascade="all, delete-orphan", single_parent=True, lazy="selectin"
+    )
     file_id: Mapped[ID] = mapped_column(ForeignKey("files.id"), init=False)
     problem: Mapped[Problem] = relationship(lazy="joined")
     problem_id: Mapped[UUID] = mapped_column(ForeignKey("problems.id"), init=False)
@@ -657,8 +713,10 @@ class ScheduledMatch(Base):
 
 
 class ResultParticipant(RawBase):
-    match: Mapped["MatchResult"] = relationship(back_populates="participants", init=False)
-    match_id: Mapped[ID] = mapped_column(ForeignKey("matchresults.id"), primary_key=True, init=False)
+    match: Mapped[MatchResult] = relationship(back_populates="participants", init=False)
+    match_id: Mapped[ID] = mapped_column(
+        ForeignKey("matchresults.id"), primary_key=True, init=False
+    )
     team: Mapped[Team] = relationship()
     team_id: Mapped[ID] = mapped_column(ForeignKey("teams.id"), primary_key=True, init=False)
     generator_id: Mapped[ID | None] = mapped_column(ForeignKey("programs.id"), init=False)
@@ -678,10 +736,16 @@ class MatchResult(Base, PermissionCheck):
     time: Mapped[datetime]
     problem: Mapped[Problem] = relationship()
     problem_id: Mapped[ID] = mapped_column(ForeignKey(Problem.id), init=False)
-    participants: Mapped[set[ResultParticipant]] = relationship(default=set, cascade="all, delete-orphan")
+    participants: Mapped[set[ResultParticipant]] = relationship(
+        default=set, cascade="all, delete-orphan"
+    )
     logs_id: Mapped[ID | None] = mapped_column(ForeignKey("files.id"), init=False)
     logs: Mapped[File | None] = relationship(
-        default=None, foreign_keys=logs_id, cascade="all, delete-orphan", single_parent=True, lazy="selectin"
+        default=None,
+        foreign_keys=logs_id,
+        cascade="all, delete-orphan",
+        single_parent=True,
+        lazy="selectin",
     )
 
     Schema = schemas.MatchResult
@@ -712,7 +776,7 @@ class ExtraPoints(Base, PermissionCheck):
     @classmethod
     def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
         return ExtraPoints.team.has(Team.tournament_id == team.tournament_id)
-    
+
     def _editable(self, team: Team) -> bool:
         return False
 

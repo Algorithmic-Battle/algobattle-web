@@ -1,14 +1,15 @@
+from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Annotated, AsyncIterable, Literal, Self
+from typing import Annotated, Literal, Self
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
 
-from algobattle_web.models import Team, Tournament, User, Session
+from algobattle_web.models import Session, Team, Tournament, User
 from algobattle_web.util import SessionLocal
 
 
-async def get_db() -> AsyncIterable[Session]:
+def get_db() -> Generator[Session]:
     with SessionLocal() as db:
         try:
             yield db
@@ -17,16 +18,16 @@ async def get_db() -> AsyncIterable[Session]:
             raise
 
 
-Database = Annotated[Session, Depends(get_db)]
+type Database = Annotated[Session, Depends(get_db)]
 
 
 def curr_user(
-    db: Session = Depends(get_db), user_token: str | None = Depends(APIKeyHeader(name="X-User-Token"))
+    db: Database, user_token: Annotated[str | None, Depends(APIKeyHeader(name="X-User-Token"))]
 ) -> User | None:
     return User.decode_token(db, user_token)
 
 
-CurrUser = Annotated[User | None, Depends(curr_user)]
+type CurrUser = Annotated[User | None, Depends(curr_user)]
 
 
 @dataclass
@@ -52,6 +53,6 @@ class LoginInfo:
 LoggedIn = Annotated[LoginInfo, Depends(LoginInfo.dependency)]
 
 
-def check_if_admin(user: User = Depends(curr_user)):
-    if not user.is_admin:
+def check_if_admin(user: CurrUser):
+    if user is None or not user.is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN)

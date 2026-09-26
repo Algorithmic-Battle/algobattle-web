@@ -2,14 +2,22 @@ from datetime import datetime, timedelta
 from os import environ
 from time import sleep
 from zipfile import ZipFile
-from anyio import run
-from sqlalchemy import select, create_engine
 
-from algobattle.match import Match, AlgobattleConfig, TeamInfo, ProjectConfig
-from algobattle.util import Role, TempDir, ExceptionInfo
 from algobattle.battle import ProgramLogConfigTime
-from algobattle_web.models import MatchResult, Program, ResultParticipant, ScheduledMatch, File, Session
-from algobattle_web.util import EnvConfig, MatchStatus, install_packages, SessionLocal
+from algobattle.match import AlgobattleConfig, Match, ProjectConfig, TeamInfo
+from algobattle.util import ExceptionInfo, Role, TempDir
+from anyio import run
+from sqlalchemy import create_engine, select
+
+from algobattle_web.models import (
+    File,
+    MatchResult,
+    Program,
+    ResultParticipant,
+    ScheduledMatch,
+    Session,
+)
+from algobattle_web.util import EnvConfig, MatchStatus, SessionLocal, install_packages
 
 
 def run_match(db: Session, scheduled_match: ScheduledMatch):

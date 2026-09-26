@@ -1,7 +1,7 @@
 from logging.config import fileConfig
 
-from sqlalchemy import create_engine
 from alembic import context
+from sqlalchemy import create_engine
 
 from algobattle_web.models import RawBase
 from algobattle_web.util import EnvConfig

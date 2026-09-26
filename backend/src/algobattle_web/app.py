@@ -1,22 +1,22 @@
-from contextlib import asynccontextmanager
 import json
+from contextlib import asynccontextmanager
 from importlib.resources import as_file, files
 
+from alembic.command import stamp, upgrade
+from alembic.config import Config
+from alembic.migration import MigrationContext
 from fastapi import FastAPI, Request, status
-from fastapi.exceptions import RequestValidationError, HTTPException
-from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from sqlalchemy_utils.functions import database_exists, create_database
+from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine
-from alembic.config import Config
-from alembic.command import upgrade, stamp
-from alembic.migration import MigrationContext
+from sqlalchemy_utils.functions import create_database, database_exists
 
+from algobattle_web.api import SchemaRoute, router as api
 from algobattle_web.models import Base, ServerSettings, User
-from algobattle_web.api import router as api, SchemaRoute
-from algobattle_web.util import EnvConfig, PermissionExcpetion, ValueTaken, SessionLocal
+from algobattle_web.util import EnvConfig, PermissionExcpetion, SessionLocal, ValueTaken
 
 
 @asynccontextmanager
@@ -78,7 +78,7 @@ app.openapi = custom_openapi
 
 
 @app.exception_handler(RequestValidationError)
-async def err_handler(request: Request, e: RequestValidationError):
+def err_handler(request: Request, e: RequestValidationError):
     return JSONResponse(
         status_code=422,
         content=jsonable_encoder(
@@ -91,12 +91,12 @@ async def err_handler(request: Request, e: RequestValidationError):
 
 
 @app.exception_handler(PermissionExcpetion)
-async def perm_err(request: Request, e: PermissionError):
+def perm_err(request: Request, e: PermissionError):
     raise HTTPException(status.HTTP_403_FORBIDDEN)
 
 
 @app.exception_handler(ValueTaken)
-async def val_taken_err(request: Request, e: ValueTaken):
+def val_taken_err(request: Request, e: ValueTaken):
     return JSONResponse(
         status_code=409,
         content=jsonable_encoder(

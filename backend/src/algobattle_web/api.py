@@ -1,64 +1,59 @@
 "Module specifying the json api actions."
+
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from enum import Enum, StrEnum
 from os import environ
 from smtplib import SMTP
-from typing import Annotated, Any, Callable, Literal, Self, Sequence, TypeVar
-from uuid import UUID
+from typing import Annotated, Any, Literal, Self
 from urllib.parse import quote
-from annotated_types import Interval
-
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Form, BackgroundTasks
-from fastapi.routing import APIRoute
-from fastapi.dependencies.utils import get_typed_return_annotation
-from fastapi.datastructures import Default, DefaultPlaceholder
-from fastapi.responses import FileResponse
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from pydantic import ByteSize, Field, WithJsonSchema, TypeAdapter
+from uuid import UUID
 
 from algobattle.util import Role
+from annotated_types import Interval
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Form, HTTPException, UploadFile
+from fastapi.datastructures import Default, DefaultPlaceholder
+from fastapi.dependencies.utils import get_typed_return_annotation
+from fastapi.responses import FileResponse
+from fastapi.routing import APIRoute
+from pydantic import ByteSize, Field, TypeAdapter, WithJsonSchema
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+
 from algobattle_web import schemas
+from algobattle_web.dependencies import CurrUser, Database, LoggedIn, check_if_admin, get_db
 from algobattle_web.models import (
+    ID,
     ExtraPoints,
     File as DbFile,
-    ProblemPageData,
-    ResultParticipant,
-    ServerSettings,
-    TeamSettings,
-    UserSettings,
-    encode,
-    Session,
-    ID,
-    Tournament,
-    Report,
     MatchResult,
     Problem,
+    ProblemPageData,
     Program,
+    Report,
+    ResultParticipant,
     ScheduledMatch,
+    ServerSettings,
+    Session,
     Team,
+    TeamSettings,
+    Tournament,
     User,
+    UserSettings,
+    encode,
 )
 from algobattle_web.util import (
+    BaseSchema,
     EmailConfig,
     EnvConfig,
     MatchStatus,
     SessionLocal,
     ValueTaken,
     unwrap,
-    BaseSchema,
-)
-from algobattle_web.dependencies import (
-    CurrUser,
-    Database,
-    LoggedIn,
-    check_if_admin,
-    get_db,
 )
 
-__all__ = ("router", "admin")
-T = TypeVar("T")
+__all__ = ("admin", "router")
 
 
 class Remove(Enum):
@@ -66,8 +61,8 @@ class Remove(Enum):
     _dummy = "_dummy"
 
     @classmethod
-    def convert(cls, value: Self | T) -> T | None:
-        if isinstance(value, cls):
+    def convert[T](cls, value: Self | T) -> T | None:
+        if isinstance(value, Remove):
             return None
         else:
             return value
@@ -78,12 +73,13 @@ class EditAction(Enum):
     remove = "remove"
 
 
-str32 = Annotated[str, Body(max_length=32)]
-str64 = Annotated[str, Body(max_length=64)]
-str128 = Annotated[str, Body(max_length=128)]
-str256 = Annotated[str, Body(max_length=256)]
-InForm = Annotated[T, Form()]
-InBody = Annotated[T, Body()]
+type Str32 = Annotated[str, Body(max_length=32)]
+type Str64 = Annotated[str, Body(max_length=64)]
+type Str128 = Annotated[str, Body(max_length=128)]
+type Str256 = Annotated[str, Body(max_length=256)]
+type InForm[T] = Annotated[T, Form()]
+type InBody[T] = Annotated[T, Body()]
+type DBSession = Annotated[Session, Depends(get_db)]
 SQL_LIMIT = 50
 
 
@@ -91,7 +87,12 @@ class SchemaRoute(APIRoute):
     """Route that defaults to using the `Schema` entry of the returned object as a response_model."""
 
     def __init__(
-        self, path: str, endpoint: Callable[..., Any], *, response_model: Any = Default(None), **kwargs: Any
+        self,
+        path: str,
+        endpoint: Callable[..., Any],
+        *,
+        response_model: Any = Default(None),  # ruff: ignore[function-call-in-default-argument]
+        **kwargs: Any,
     ) -> None:
         if isinstance(response_model, DefaultPlaceholder):
             return_annotation = get_typed_return_annotation(endpoint)
@@ -136,7 +137,7 @@ class UserSearch(BaseSchema):
 def search_users(
     *,
     db: Database,
-    ids: list[UUID] = [],
+    ids: Sequence[UUID] = (),
     name: str | None = None,
     email: str | None = None,
     is_admin: bool | None = None,
@@ -165,36 +166,39 @@ def search_users(
     if team is not None:
         filters.append(User.teams.any(Team.id == team))
     users = (
-        db.scalars(
-            select(User).where(*filters).order_by(User.is_admin.desc(), User.name.asc()).limit(SQL_LIMIT).offset(offset)
+        db
+        .scalars(
+            select(User)
+            .where(*filters)
+            .order_by(User.is_admin.desc(), User.name.asc())
+            .limit(SQL_LIMIT)
+            .offset(offset)
         )
         .unique()
         .all()
     )
     user_count = db.scalar(select(func.count()).select_from(User).where(*filters)) or 0
     teams = [team for user in users for team in user.teams]
-    return UserSearch(
-        users=encode(users),
-        teams=encode(teams),
-        total=user_count,
-    )
+    return UserSearch(users=encode(users), teams=encode(teams), total=user_count)
 
 
 class CreateUser(BaseSchema):
     name: str = Field(min_length=1)
     email: str = Field(min_length=1)
     is_admin: bool = False
-    teams: list[ID] = []
+    teams: list[ID] = Field(default_factory=list)
 
 
 @admin.post("/user", tags=["user"])
-def create_user(*, db: Session = Depends(get_db), user: CreateUser) -> User:
-    _teams = [unwrap(db.get(Team, id)) for id in user.teams]
+def create_user(*, db: Database, user: CreateUser) -> User:
+    teams = [unwrap(db.get(Team, id)) for id in user.teams]
     if db.scalars(select(User).filter(User.email == user.email)).unique().first() is not None:
         raise ValueTaken("email", user.email)
-    new = User(email=user.email, name=user.name, is_admin=user.is_admin, teams=_teams)
+    new = User(email=user.email, name=user.name, is_admin=user.is_admin, teams=teams)
     if new.is_admin:
-        new.settings.selected_tournament = db.scalars(select(Tournament).order_by(Tournament.time.desc())).first()
+        new.settings.selected_tournament = db.scalars(
+            select(Tournament).order_by(Tournament.time.desc())
+        ).first()
     elif new.teams:
         new.settings.selected_team = new.teams[0]
 
@@ -207,11 +211,11 @@ class EditUser(BaseSchema):
     name: str | None = Field(None, min_length=1)
     email: str | None = Field(None, min_length=1)
     is_admin: bool | None = None
-    teams: dict[ID, EditAction] = {}
+    teams: dict[ID, EditAction] = Field(default_factory=dict)
 
 
 @admin.patch("/user/{id}", tags=["user"])
-def edit_user(*, db: Session = Depends(get_db), id: ID, edit: EditUser) -> User:
+def edit_user(*, db: Database, id: ID, edit: EditUser) -> User:
     user = unwrap(User.get(db, id))
 
     for key, val in edit.model_dump(exclude_unset=True).items():
@@ -237,7 +241,7 @@ def edit_user(*, db: Session = Depends(get_db), id: ID, edit: EditUser) -> User:
 
 
 @admin.delete("/user/{id}", tags=["user"])
-def delete_user(*, db: Session = Depends(get_db), id: ID) -> bool:
+def delete_user(*, db: Database, id: ID) -> bool:
     user = unwrap(User.get(db, id))
     db.delete(user)
     db.commit()
@@ -264,7 +268,9 @@ def get_self(*, db: Database, login: LoggedIn) -> LoggedIn:
 
 
 @router.post("/user/login", tags=["user"])
-def login(*, db: Database, email: str = Body(), target_url: InBody[str], tasks: BackgroundTasks) -> None:
+def login(
+    *, db: Database, email: str = Body(), target_url: InBody[str], tasks: BackgroundTasks
+) -> None:
     user = User.get(db, email)
     if user is not None:
         tasks.add_task(send_login_email, user.id, target_url)
@@ -359,7 +365,7 @@ def get_team_settings(*, db: Database, login: LoggedIn) -> TeamSettings:
 
 
 @router.patch("/settings/team", tags=["settings"], name="editTeam")
-def edit_team_settings(*, db: Database, login: LoggedIn, name: InBody[str32 | None] = None) -> None:
+def edit_team_settings(*, db: Database, login: LoggedIn, name: InBody[Str32 | None] = None) -> None:
     team = login.team
     if not isinstance(team, Team):
         raise HTTPException(400, "User has not selected a team")
@@ -367,7 +373,9 @@ def edit_team_settings(*, db: Database, login: LoggedIn, name: InBody[str32 | No
         if not ServerSettings.get(db).team_change_name:
             raise HTTPException(400, "Teams cannot change their own name")
         if db.scalar(
-            select(Team).where(Team.tournament_id == team.tournament_id, Team.name == name, Team.id != team.id)
+            select(Team).where(
+                Team.tournament_id == team.tournament_id, Team.name == name, Team.id != team.id
+            )
         ):
             raise ValueTaken("name", name)
         team.name = name
@@ -375,7 +383,9 @@ def edit_team_settings(*, db: Database, login: LoggedIn, name: InBody[str32 | No
 
 
 @router.get("/settings/server", tags=["settings"], name="getServer")
-def get_server_settings(*, db: Database, login: LoggedIn) -> schemas.ServerSettings | schemas.AdminServerSettings:
+def get_server_settings(
+    *, db: Database, login: LoggedIn
+) -> schemas.ServerSettings | schemas.AdminServerSettings:
     if login.team == "admin":
         return schemas.AdminServerSettings.model_validate(ServerSettings.get(db))
     else:
@@ -390,7 +400,12 @@ def edit_server_settings(
     team_change_name: InBody[bool | None],
     email_config: InBody[EmailConfig | None] = None,
     upload_file_limit: InBody[
-        Annotated[ByteSize, Interval(ge=0, le=2_000_000_000), WithJsonSchema(TypeAdapter(str).json_schema())] | None
+        Annotated[
+            ByteSize,
+            Interval(ge=0, le=2_000_000_000),
+            WithJsonSchema(TypeAdapter(str).json_schema()),
+        ]
+        | None
     ] = None,
 ) -> None:
     settings = ServerSettings.get(db)
@@ -424,12 +439,14 @@ def all_tournaments(
         filters.append(Tournament.name == name)
     if id:
         filters.append(Tournament.id == id)
-    tournaments = db.scalars(select(Tournament).where(*filters, Tournament.visible_sql(login.team))).all()
+    tournaments = db.scalars(
+        select(Tournament).where(*filters, Tournament.visible_sql(login.team))
+    ).all()
     return encode(tournaments)
 
 
 @admin.post("/tournament", tags=["tournament"], name="create")
-def create_tournament(*, db: Database, name: str32) -> Tournament:
+def create_tournament(*, db: Database, name: Str32) -> Tournament:
     if db.scalars(select(Tournament).filter(Tournament.name == name)).first() is not None:
         raise ValueTaken("name", name)
     tournament = Tournament(name=name)
@@ -439,9 +456,12 @@ def create_tournament(*, db: Database, name: str32) -> Tournament:
 
 
 @admin.patch("/tournament/{id}", tags=["tournament"], name="edit")
-def edit_tournament(*, db: Database, id: ID, name: str32) -> Tournament:
+def edit_tournament(*, db: Database, id: ID, name: Str32) -> Tournament:
     tournament = unwrap(Tournament.get(db, id))
-    if db.scalar(select(Tournament).where(Tournament.name == name, Tournament.id != id)) is not None:
+    if (
+        db.scalar(select(Tournament).where(Tournament.name == name, Tournament.id != id))
+        is not None
+    ):
         raise ValueTaken("name", tournament.name)
     tournament.name = name
     db.commit()
@@ -496,14 +516,23 @@ def get_scores(db: Database, login: LoggedIn, id: ID) -> ScoreData:
     ).all()
 
     parsed_results = [
-        MatchEvent(time=r.time, points={p.team_id: p.points for p in r.participants}, problem=r.problem_id)
+        MatchEvent(
+            time=r.time, points={p.team_id: p.points for p in r.participants}, problem=r.problem_id
+        )
         for r in results
     ]
     parsed_extra = [ExtraEvent(time=e.time, points={e.team_id: e.points}) for e in extra_points]
     teams = db.scalars(select(Team).where(Team.tournament_id == tournament.id)).unique().all()
-    problems = db.scalars(
-        select(Problem).where(Problem.tournament_id == tournament.id, Problem.visible_sql(login.team))
-    ).unique().all()
+    problems = (
+        db
+        .scalars(
+            select(Problem).where(
+                Problem.tournament_id == tournament.id, Problem.visible_sql(login.team)
+            )
+        )
+        .unique()
+        .all()
+    )
     return ScoreData(
         events=sorted(parsed_results + parsed_extra, key=lambda e: e.time),
         teams={team.id: team.name for team in teams},
@@ -526,7 +555,7 @@ class TeamSearch(BaseSchema):
 def get_teams(
     *,
     db: Database,
-    ids: list[ID] = [],
+    ids: Sequence[ID] = (),
     name: str | None = None,
     tournament: ID | None = None,
     offset: int = 0,
@@ -539,7 +568,8 @@ def get_teams(
     if tournament is not None:
         filters.append(Team.tournament_id == tournament)
     teams = (
-        db.scalars(
+        db
+        .scalars(
             select(Team)
             .where(*filters)
             .order_by(Team.tournament_id.asc(), Team.name.asc())
@@ -551,15 +581,13 @@ def get_teams(
     )
     team_count = db.scalar(select(func.count()).select_from(Team).where(*filters)) or 0
     users = [user for team in teams for user in team.members]
-    return TeamSearch(
-        total=team_count,
-        teams=encode(teams),
-        users=encode(users),
-    )
+    return TeamSearch(total=team_count, teams=encode(teams), users=encode(users))
 
 
 @admin.post("/team", tags=["team"], name="create")
-def create_team(*, db: Database, name: str32, tournament: InBody[ID], members: InBody[set[ID]]) -> Team:
+def create_team(
+    *, db: Database, name: Str32, tournament: InBody[ID], members: InBody[set[ID]]
+) -> Team:
     tournament_ = unwrap(Tournament.get(db, tournament))
     if name in (t.name for t in tournament_.teams):
         raise ValueTaken("name", name)
@@ -575,9 +603,9 @@ def edit_team(
     *,
     db: Database,
     id: ID,
-    name: str32 | None = None,
+    name: Str32 | None = None,
     tournament: InBody[ID | None] = None,
-    members: dict[ID, EditAction] = {},
+    members: Mapping[ID, EditAction] = {},
 ) -> Team:
     team = unwrap(Team.get(db, id))
     if name is not None:
@@ -633,13 +661,17 @@ def get_problems(
         filters.append(Problem.id.in_(ids))
     if name:
         filters.append(Problem.name == name)
-    problems = db.scalars(select(Problem).where(*filters, Problem.visible_sql(login.team))).unique().all()
+    problems = (
+        db.scalars(select(Problem).where(*filters, Problem.visible_sql(login.team))).unique().all()
+    )
     return encode(problems)
 
 
 @router.get("/problem/pagedata", tags=["problem"], name="pageData")
 def get_problem_page_data(*, db: Database, login: LoggedIn, id: ID) -> ProblemPageData | None:
-    prob = db.scalars(select(Problem).where(Problem.id == id, Problem.visible_sql(login.team))).first()
+    prob = db.scalars(
+        select(Problem).where(Problem.id == id, Problem.visible_sql(login.team))
+    ).first()
     if prob is None:
         raise ValueError
     return prob.page_data
@@ -651,17 +683,17 @@ def create_problem(
     db: Database,
     problem: UploadFile | UUID,
     name: str = Form(),
-    tournament: ID = Form(),
-    start: datetime | None = Form(None),
-    end: datetime | None = Form(None),
+    tournament: InForm[ID],
+    start: InForm[datetime | None] = None,
+    end: InForm[datetime | None] = None,
     image: UploadFile | None = None,
-    alt_text: str = Form(""),
-    description: str = Form(""),
-    color: str = Form("#ffffff"),
+    alt_text: InForm[str] = "",
+    description: InForm[str] = "",
+    color: InForm[str] = "#ffffff",
     background_tasks: BackgroundTasks,
 ) -> str:
-    _tournament = unwrap(db.get(Tournament, tournament))
-    _image = DbFile.maybe(image, alt_text=alt_text)
+    tournament_obj = unwrap(db.get(Tournament, tournament))
+    image_file = DbFile.maybe(image, alt_text=alt_text)
     limit = ServerSettings.get(db).upload_file_limit
     if isinstance(problem, UUID):
         template_prob = unwrap(db.get(Problem, problem))
@@ -672,7 +704,9 @@ def create_problem(
             raise ValueError
         file = DbFile.from_file(problem)
         page_data = None
-    if db.scalars(select(Problem).where(Problem.name == name, Problem.tournament_id == tournament)).first():
+    if db.scalars(
+        select(Problem).where(Problem.name == name, Problem.tournament_id == tournament)
+    ).first():
         raise ValueTaken("name", name)
     if image is not None and image.size and image.size > limit:
         raise ValueError
@@ -680,10 +714,10 @@ def create_problem(
     prob = Problem(
         file=file,
         name=name,
-        tournament=_tournament,
+        tournament=tournament_obj,
         start=start,
         end=end,
-        image=_image,
+        image=image_file,
         description=description,
         colour=color,
         page_data=page_data,
@@ -715,7 +749,9 @@ def edit_problem(
     if name:
         new_tournament = tournament or problem.tournament_id
         if db.scalar(
-            select(Problem).where(Problem.name == name, Problem.id != id, Problem.tournament_id == new_tournament)
+            select(Problem).where(
+                Problem.name == name, Problem.id != id, Problem.tournament_id == new_tournament
+            )
         ):
             raise ValueTaken("name", name)
         problem.name = name
@@ -738,7 +774,11 @@ def edit_problem(
         tasks.add_task(problem.compute_page_data)
     if image is not None:
         image = Remove.convert(image)
-        if image is not None and image.size and ServerSettings.get(db).upload_file_limit < image.size:
+        if (
+            image is not None
+            and image.size
+            and ServerSettings.get(db).upload_file_limit < image.size
+        ):
             raise ValueError
         problem.image = DbFile.maybe(image)
     db.commit()
@@ -759,14 +799,7 @@ def delete_problem(*, db: Database, id: ID) -> bool:
 
 
 @router.put("/report/{problem}/{team}", tags=["report"], name="upload")
-def add_report(
-    *,
-    db: Database,
-    login: LoggedIn,
-    team: ID,
-    problem: ID,
-    file: UploadFile,
-) -> Report:
+def add_report(*, db: Database, login: LoggedIn, team: ID, problem: ID, file: UploadFile) -> Report:
     if file.size and ServerSettings.get(db).upload_file_limit < file.size:
         raise ValueError
     problem_model = Problem.get_unwrap(db, problem)
@@ -803,7 +836,11 @@ class Reports(BaseSchema):
 
 @router.get("/report", tags=["report"], name="get")
 def get_reports(
-    db: Database, login: LoggedIn, problem: UUID | None = None, team: UUID | None = None, offset: int = 0
+    db: Database,
+    login: LoggedIn,
+    problem: UUID | None = None,
+    team: UUID | None = None,
+    offset: int = 0,
 ) -> Reports:
     filters = [Report.visible_sql(login.team)]
     if problem:
@@ -811,9 +848,13 @@ def get_reports(
     if team:
         filters.append(Report.team_id == team)
 
-    reports = db.scalars(select(Report).where(*filters).limit(SQL_LIMIT).offset(offset)).unique().all()
+    reports = (
+        db.scalars(select(Report).where(*filters).limit(SQL_LIMIT).offset(offset)).unique().all()
+    )
     count = db.scalar(select(func.count()).select_from(Report).where(*filters)) or 0
-    return Reports(reports=encode(reports), teams=encode(report.team for report in reports), total=count)
+    return Reports(
+        reports=encode(reports), teams=encode(report.team for report in reports), total=count
+    )
 
 
 # *******************************************************************************
@@ -852,8 +893,13 @@ def search_program(
     if tournament is not None:
         filters.append(Program.problem.has(Problem.tournament_id == tournament))
     programs = (
-        db.scalars(
-            select(Program).where(*filters).order_by(Program.creation_time.desc()).limit(SQL_LIMIT).offset(offset)
+        db
+        .scalars(
+            select(Program)
+            .where(*filters)
+            .order_by(Program.creation_time.desc())
+            .limit(SQL_LIMIT)
+            .offset(offset)
         )
         .unique()
         .all()
@@ -869,13 +915,7 @@ def search_program(
 
 @router.post("/program", tags=["program"], name="create")
 def upload_program(
-    *,
-    db: Database,
-    login: LoggedIn,
-    name: str = "",
-    role: Role,
-    problem: ID,
-    file: UploadFile,
+    *, db: Database, login: LoggedIn, name: str = "", role: Role, problem: ID, file: UploadFile
 ) -> Program:
     if file.size and ServerSettings.get(db).upload_file_limit < file.size:
         raise ValueError
@@ -911,25 +951,25 @@ class ScheduleInfo(BaseSchema):
 @router.get("/match/schedule", tags=["match"], name="getScheduled")
 def scheduled_matches(*, db: Database, login: LoggedIn) -> ScheduleInfo:
     matches = (
-        db.scalars(
+        db
+        .scalars(
             select(ScheduledMatch).where(
-                ScheduledMatch.problem.has((Problem.tournament == login.tournament) & Problem.visible_sql(login.team))
+                ScheduledMatch.problem.has(
+                    (Problem.tournament == login.tournament) & Problem.visible_sql(login.team)
+                )
             )
         )
         .unique()
         .all()
     )
-    return ScheduleInfo(matches=encode(matches), problems=encode(match.problem for match in matches))
+    return ScheduleInfo(
+        matches=encode(matches), problems=encode(match.problem for match in matches)
+    )
 
 
 @admin.post("/match/schedule", tags=["match"], name="createSchedule")
 def create_schedule(
-    *,
-    db: Database,
-    name: str32 = "",
-    time: datetime,
-    problem: ID,
-    points: int = 100,
+    *, db: Database, name: Str32 = "", time: datetime, problem: ID, points: int = 100
 ) -> ScheduledMatch:
     problem_ = unwrap(db.get(Problem, problem))
     schedule = ScheduledMatch(time=time, problem=problem_, name=name, points=points)
@@ -999,7 +1039,9 @@ def delete_results(*, db: Database, id: ID) -> None:
     db.commit()
 
 
-@admin.post("/match/result", tags=["match"], name="createResult", response_model=schemas.MatchResult)
+@admin.post(
+    "/match/result", tags=["match"], name="createResult", response_model=schemas.MatchResult
+)
 def add_result(
     *,
     db: Database,
@@ -1029,14 +1071,18 @@ def add_result(
             for team, gen, sol, p in zip(teams, generators, solvers, points, strict=True)
         }
     except ValueError:
-        raise HTTPException(422, "Length of participant field infos was not equal")
-    db_res = MatchResult(status=status, time=time, problem=problem_model, participants=participants, logs=file)
+        raise HTTPException(422, "Length of participant field infos was not equal") from None
+    db_res = MatchResult(
+        status=status, time=time, problem=problem_model, participants=participants, logs=file
+    )
     db.add(db_res)
     db.commit()
     return db_res
 
 
-@admin.put("/match/result/{id}", tags=["match"], name="editResult", response_model=schemas.MatchResult)
+@admin.put(
+    "/match/result/{id}", tags=["match"], name="editResult", response_model=schemas.MatchResult
+)
 def update_result(
     db: Database,
     id: UUID,
@@ -1072,7 +1118,7 @@ def update_result(
             for team, gen, sol, p in zip(teams, generators, solvers, points, strict=True)
         }
     except ValueError:
-        raise HTTPException(422, "Length of participant field infos was not equal")
+        raise HTTPException(422, "Length of participant field infos was not equal") from None
     db.commit()
     return res
 
@@ -1082,7 +1128,9 @@ def update_result(
 # *******************************************************************************
 
 
-@router.get("/extrapoints", tags=["extrapoints"], name="get", response_model=list[schemas.ExtraPoints])
+@router.get(
+    "/extrapoints", tags=["extrapoints"], name="get", response_model=list[schemas.ExtraPoints]
+)
 def get_extra_points(
     db: Database, login: LoggedIn, tournament: UUID | None = None, tag: str | None = None
 ) -> Sequence[ExtraPoints]:
@@ -1098,7 +1146,7 @@ def get_extra_points(
 def create_extra_points(
     db: Database,
     time: InBody[datetime],
-    tag: str32,
+    tag: Str32,
     team: InBody[UUID],
     points: InBody[float],
     description: InBody[str] = "",
@@ -1115,7 +1163,7 @@ def edit_extra_points(
     db: Database,
     id: UUID,
     time: InBody[datetime | None] = None,
-    tag: InBody[str32 | None] = None,
+    tag: InBody[Str32 | None] = None,
     team: InBody[UUID | None] = None,
     points: InBody[float | None] = None,
     description: InBody[str | None] = None,

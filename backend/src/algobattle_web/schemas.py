@@ -1,14 +1,15 @@
 """Module containing db model's schemas to avoid namespacing issues."""
+
 from abc import ABC
 from datetime import datetime
 from typing import Annotated
 from urllib.parse import quote as urlencode
 from uuid import UUID
 
+from algobattle.util import Role
 from pydantic import ByteSize, Field, PlainSerializer, computed_field, field_validator
 
 from algobattle_web.util import BaseSchema, EmailConfig, EnvConfig, MatchStatus, ObjID
-from algobattle.util import Role
 
 
 def naive_localize(date: datetime) -> str:
@@ -67,7 +68,7 @@ class AdminServerSettings(ServerSettings):
     @classmethod
     def _(cls, value: object) -> str:
         if not isinstance(value, int):
-            raise ValueError
+            raise ValueError  # ruff: ignore[type-check-without-type-error]
         return ByteSize(value).human_readable(True)
 
 

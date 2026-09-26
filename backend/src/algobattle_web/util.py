@@ -1,22 +1,18 @@
 """Util functions."""
+import sys
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
-from pathlib import Path
-from subprocess import run
-import sys
-from typing import Annotated, Any, Generic, Self, TypeVar
-from uuid import UUID
 from mimetypes import guess_type as mimetypes_guess_type
 from os import environ
-from markdown import markdown
+from pathlib import Path
+from subprocess import run
+from typing import Annotated, Any, Self
+from uuid import UUID
 
-from pydantic import (
-    BeforeValidator,
-    ConfigDict,
-    BaseModel,
-)
 from fastapi import HTTPException
+from markdown import markdown
+from pydantic import BaseModel, BeforeValidator, ConfigDict
 from sqlalchemy import JSON, TypeDecorator
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import sessionmaker
@@ -35,13 +31,13 @@ class EnvConfig:
         except KeyError:
             raise SystemExit(
                 "You need to specify the database password in the `ALGOBATTLE_DB_PW` environment variable"
-            )
+            ) from None
         try:
             web_url = environ["ALGOBATTLE_BASE_URL"]
         except KeyError:
             raise SystemExit(
                 "You need to specify the base url of your server in the `ALGOBATTLE_BASE_URL` environment variable"
-            )
+            ) from None
         return cls(
             db_url=f"mysql+mysqldb://root:{db_password}@database:3306/algobattle",
             base_url=web_url,
@@ -68,7 +64,7 @@ def model_to_id(obj: object) -> UUID:
         if isinstance(obj.id, UUID):  # type: ignore
             return obj.id  # type: ignore
         else:
-            raise ValueError
+            raise ValueError # ruff: ignore[type-check-without-type-error]
     elif isinstance(obj, str):
         return UUID(obj)
     else:
@@ -86,10 +82,7 @@ class EmailConfig(BaseSchema):
     password: str = ""
 
 
-T = TypeVar("T")
-
-
-def unwrap(arg: T | None) -> T:
+def unwrap[T](arg: T | None) -> T:
     """Returns the argument if it is not `None`, otherwise raises a HTTPException."""
     if arg is None:
         raise HTTPException(400, detail="Attempted to access a nonexistent resource.")
@@ -140,7 +133,7 @@ def guess_mimetype(info: str | Path) -> str:
     return _extension_map.get(info.split(".")[-1], "application/octet-stream")
 
 
-class Wrapped(BaseSchema, Generic[T]):
+class Wrapped[T](BaseSchema):
     """Wraps a value in a schema to force json encoding."""
 
     data: T
@@ -158,7 +151,7 @@ def install_packages(packages: list[str]) -> None:
     """Installs the given packages."""
     if not packages:
         return
-    installer = run([sys.executable, "-m", "pip", "install"] + packages, env=environ.copy())
+    installer = run([sys.executable, "-m", "pip", "install", *packages], env=environ.copy())
     if installer.returncode:
         raise RuntimeError
 
@@ -182,10 +175,7 @@ def render_text(text: str, mime_type: str = "text/plain") -> str | None:
         return None
 
 
-M = TypeVar("M", bound=BaseSchema)
-
-
-class SqlableModel(TypeDecorator, Generic[M]):
+class SqlableModel[M: BaseSchema](TypeDecorator):
     """Stores pydantic objects as JSON in a sql table."""
 
     impl = JSON

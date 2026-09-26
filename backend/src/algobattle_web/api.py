@@ -297,7 +297,7 @@ def send_login_email(user_id: UUID, target_url: str) -> None:
         server.ehlo()
         server.starttls()
         server.login(config.username, config.password)
-        server.sendmail(config.username, user.email, msg.as_string())
+        server.sendmail(config.address, user.email, msg.as_string())
         server.close()
 
 

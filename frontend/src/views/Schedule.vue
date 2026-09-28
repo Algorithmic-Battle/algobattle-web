@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { store, type ModelDict } from "@/shared";
+import { store, type ModelDict, problemURL } from "@/shared";
 import { createSchedule, deleteSchedule as deleteScheduleRequest, editSchedule, getProblems, scheduledMatches } from "@client";
 import { Modal } from "bootstrap";
 import type { ScheduledMatch, Problem, Tournament } from "@client";
@@ -101,7 +101,7 @@ async function deleteMatch() {
           <td>{{ match.name }}</td>
           <td>{{ new Date(match.time).toLocaleString() }}</td>
           <td>
-            <RouterLink :to="problems[match.problem].link">{{ problems[match.problem].name }}</RouterLink>
+            <RouterLink :to="problemURL(problems[match.problem])">{{ problems[match.problem].name }}</RouterLink>
           </td>
           <td>{{ match.points }}</td>
           <td v-if="store.team == 'admin'" class="text-end">

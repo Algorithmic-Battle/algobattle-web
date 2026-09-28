@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import type { UserLogin, Team, Tournament, ServerSettings } from "@client";
+import type { UserLogin, Team, Tournament, ServerSettings, Problem } from "@client";
 import { DateTime } from "luxon";
 
 export type ModelDict<T> = { [key: string]: T };
@@ -22,3 +22,9 @@ export const store = reactive<{
   team: null,
   tournament: null,
 });
+
+export function problemURL(problem: Problem): string {
+  const tournamentStr = encodeURIComponent(problem.tournament.name);
+  const name = encodeURIComponent(problem.name);
+  return `/problems/${tournamentStr}/${name}`;
+}

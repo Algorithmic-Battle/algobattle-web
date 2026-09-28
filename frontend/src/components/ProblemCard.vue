@@ -1,16 +1,11 @@
 <script setup lang="ts">
-import type { Tournament, Problem } from "@client";
-import { computed } from "vue";
+import type { Problem } from "@client";
+import { problemURL } from "@/shared";
 
 const props = defineProps<{
   problem: Problem;
 }>();
 
-const problem_url = computed(() => {
-  const tournamentStr = encodeURIComponent(props.problem.tournament.name);
-  const name = encodeURIComponent(props.problem.name);
-  return `/problems/${tournamentStr}/${name}`;
-});
 </script>
 
 <template>
@@ -30,7 +25,7 @@ const problem_url = computed(() => {
     <div class="card-body d-flex flex-column" style="height: 13.5rem">
       <h5 class="card-title">{{ problem.name }}</h5>
       <p class="card-text overflow-hidden">{{ problem.description }}</p>
-      <RouterLink :to="problem_url" class="btn btn-sm btn-primary mt-auto stretched-link"
+      <RouterLink :to="problemURL(problem)" class="btn btn-sm btn-primary mt-auto stretched-link"
         >View details</RouterLink
       >
     </div>

@@ -593,10 +593,6 @@ class Problem(Base, PermissionCheck):
 
     __table_args__ = (UniqueConstraint("name", "tournament_id"),)
 
-    @property
-    def link(self) -> str:
-        return f"/problems/{self.tournament.name}/{self.name}"
-
     def _visible(self, team: Team) -> bool:
         return team.tournament == self.tournament and (
             self.start is None or self.start <= datetime.now()

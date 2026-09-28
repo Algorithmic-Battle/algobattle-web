@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { store, type ModelDict, formatDateTime } from "@/shared";
+import { store, type ModelDict, formatDateTime, problemURL } from "@/shared";
 import {
   addResult,
   createExtraPoints,
@@ -18,7 +18,6 @@ import {
 import { Modal } from "bootstrap";
 import type {
   Problem,
-  Tournament,
   MatchResult,
   Team,
   DbFile,
@@ -330,7 +329,7 @@ function makeFreeform() {
           <tr v-for="result in sortedResults" :key="result.id">
             <td>{{ formatDateTime(result.time) }}</td>
             <td>
-              <RouterLink v-if="problems[result.problem]" :to="problems[result.problem].link">{{ problems[result.problem].name }}</RouterLink>
+              <RouterLink v-if="problems[result.problem]" :to="problemURL(problems[result.problem])">{{ problems[result.problem].name }}</RouterLink>
             </td>
             <td>{{ result.status }}</td>
             <td>

@@ -58,10 +58,10 @@ async function saveEdit() {
     return;
   }
   try {
-    await editUserSettings({
+    await editUserSettings({bodyEditUserSettings: {
       email: settings.value.email,
       tournament: settings.value.user.selected_tournament?.id,
-    });
+    }});
     state.value = "success";
     store.user.email = settings.value.email;
     store.tournament = settings.value.user.selected_tournament ?? null;
@@ -77,7 +77,7 @@ async function saveEdit() {
       return;
     }
     try {
-      await editTeamSettings({ name: settings.value.team_name });
+      await editTeamSettings({body: settings.value.team_name });
       store.team.name = settings.value.team_name;
       for (const team of store.user.teams) {
         if (team.id == store.team.id) {

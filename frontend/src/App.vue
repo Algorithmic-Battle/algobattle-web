@@ -68,7 +68,7 @@ async function selectTeam(team: Team | "admin") {
   if (team == "admin" && !store.user?.is_admin) {
     return;
   }
-  await editUserSettings({ team: team == "admin" ? "admin" : team.id });
+  await editUserSettings({ bodyEditUserSettings: { team: team == "admin" ? "admin" : team.id }});
   router.go(0);
 }
 

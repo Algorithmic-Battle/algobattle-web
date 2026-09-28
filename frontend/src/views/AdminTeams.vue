@@ -103,18 +103,20 @@ async function sendData() {
       const updatedTeam = await editTeam({
         id: editData.value.id,
         name: editData.value.name,
-        body: Object.fromEntries(
-          newMembers.map((id) => [id, "add"]).concat(deletedMembers.map((id) => [id, "remove"]))
-        ),
-        tournament: editData.value.tournament?.id,
+        bodyEditTeam: {
+          members: Object.fromEntries(
+            newMembers.map((id) => [id, "add"]).concat(deletedMembers.map((id) => [id, "remove"]))
+          ),
+          tournament: editData.value.tournament?.id,
+        }
       });
       teams.value[editData.value.id] = (updatedTeam.data ?? teams.value[editData.value.id]) as Team;
     } else {
-      const newTeam = await createTeam({
+      const newTeam = await createTeam({ bodyCreateTeam: {
         tournament: editData.value.tournament!.id,
         members: editData.value.members,
-        body: editData.value.name,
-      });
+        name: editData.value.name,
+      }});
       const created = newTeam.data ?? { id: "", name: editData.value.name, tournament: editData.value.tournament ?? null, members: editData.value.members };
       teams.value[created.id] = created as Team;
     }

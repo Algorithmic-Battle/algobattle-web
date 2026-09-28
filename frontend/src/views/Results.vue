@@ -241,11 +241,13 @@ async function sendExtraPointsData() {
   if (extraEditData.value.id) {
     const res = await editExtraPoints({
       id: extraEditData.value.id,
-      time: extraEditData.value.time,
-      tag: extraEditData.value.tag,
-      team: extraEditData.value.team?.id,
-      points: extraEditData.value.points,
-      description: extraEditData.value.description,
+      bodyEditExtraPoints: {
+        time: extraEditData.value.time,
+        tag: extraEditData.value.tag,
+        team: extraEditData.value.team?.id,
+        points: extraEditData.value.points,
+        description: extraEditData.value.description,
+      },
     });
     const data = (res.data ?? null) as ExtraPoints | null;
     if (data) {
@@ -253,13 +255,13 @@ async function sendExtraPointsData() {
       extrapoints.value[i] = data;
     }
   } else {
-    const res = await createExtraPoints({
+    const res = await createExtraPoints({bodyCreateExtraPoints: {
       time: extraEditData.value.time!,
       team: extraEditData.value.team!.id,
       points: extraEditData.value.points!,
       description: extraEditData.value.description,
-      body: extraEditData.value.tag ?? "",
-    });
+      tag: extraEditData.value.tag ?? "",
+    }});
     const data = (res.data ?? null) as ExtraPoints | null;
     if (data) {
       extrapoints.value.push(data);

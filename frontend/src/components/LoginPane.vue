@@ -9,7 +9,7 @@ const msg = ref("");
 
 async function submitLogin() {
   try {
-    await loginRequest({ target_url: route.fullPath, body: email.value });
+    await loginRequest({bodyLogin : { target_url: route.fullPath, email: email.value }});
     msg.value = "email_sent";
   } catch {
     msg.value = "error";

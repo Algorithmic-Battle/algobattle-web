@@ -92,13 +92,22 @@ class SchemaRoute(APIRoute):
         endpoint: Callable[..., Any],
         *,
         response_model: Any = Default(None),  # ruff: ignore[function-call-in-default-argument]
+        response_model_exclude_unset: bool | None = None,
         **kwargs: Any,
     ) -> None:
         if isinstance(response_model, DefaultPlaceholder):
             return_annotation = get_typed_return_annotation(endpoint)
             if hasattr(return_annotation, "Schema"):
                 response_model = return_annotation.Schema
-        super().__init__(path, endpoint, response_model=response_model, **kwargs)
+        if response_model_exclude_unset is None:
+            response_model_exclude_unset = True
+        super().__init__(
+            path,
+            endpoint,
+            response_model=response_model,
+            response_model_exclude_unset=response_model_exclude_unset,
+            **kwargs,
+        )
 
 
 router = APIRouter(prefix="/api", route_class=SchemaRoute)
@@ -269,7 +278,7 @@ def get_self(*, db: Database, login: LoggedIn) -> LoggedIn:
 
 @router.post("/user/login", tags=["user"])
 def login(
-    *, db: Database, email: str = Body(), target_url: InBody[str], tasks: BackgroundTasks
+    *, db: Database, email: str = Body(), target_url: Annotated[str, Body()], tasks: BackgroundTasks
 ) -> None:
     user = User.get(db, email)
     if user is not None:
@@ -329,9 +338,9 @@ def edit_user_settings(
     *,
     db: Database,
     user: CurrUser,
-    email: InBody[str | None] = None,
-    team: InBody[ID | Literal["admin"] | None] = None,
-    tournament: InBody[ID | None] = None,
+    email: Annotated[str | None, Body()] = None,
+    team: Annotated[ID | Literal["admin"] | None, Body()] = None,
+    tournament: Annotated[ID | None, Body()] = None,
 ) -> None:
     if user is None:
         raise HTTPException(400, "Not logged in")
@@ -365,7 +374,9 @@ def get_team_settings(*, db: Database, login: LoggedIn) -> TeamSettings:
 
 
 @router.patch("/settings/team", tags=["settings"])
-def edit_team_settings(*, db: Database, login: LoggedIn, name: InBody[Str32 | None] = None) -> None:
+def edit_team_settings(
+    *, db: Database, login: LoggedIn, name: Annotated[Str32 | None, Body()] = None
+) -> None:
     team = login.team
     if not isinstance(team, Team):
         raise HTTPException(400, "User has not selected a team")
@@ -396,9 +407,9 @@ def get_server_settings(
 def edit_server_settings(
     *,
     db: Database,
-    user_change_email: InBody[bool | None] = None,
-    team_change_name: InBody[bool | None],
-    email_config: InBody[EmailConfig | None] = None,
+    user_change_email: Annotated[bool | None, Body()] = None,
+    team_change_name: Annotated[bool | None, Body()],
+    email_config: Annotated[EmailConfig | None, Body()] = None,
     upload_file_limit: InBody[
         Annotated[
             ByteSize,
@@ -586,7 +597,11 @@ def get_teams(
 
 @admin.post("/team", tags=["team"])
 def create_team(
-    *, db: Database, name: Str32, tournament: InBody[ID], members: InBody[set[ID]]
+    *,
+    db: Database,
+    name: Str32,
+    tournament: Annotated[ID, Body()],
+    members: Annotated[set[ID], Body()],
 ) -> Team:
     tournament_ = unwrap(Tournament.get(db, tournament))
     if name in (t.name for t in tournament_.teams):
@@ -604,7 +619,7 @@ def edit_team(
     db: Database,
     id: ID,
     name: Str32 | None = None,
-    tournament: InBody[ID | None] = None,
+    tournament: Annotated[ID | None, Body()] = None,
     members: Mapping[ID, EditAction] = {},
 ) -> Team:
     team = unwrap(Team.get(db, id))
@@ -983,10 +998,10 @@ def edit_schedule(
     *,
     db: Database,
     id: ID,
-    name: InBody[str | None] = None,
-    time: InBody[datetime | None] = None,
-    problem: InBody[ID | None] = None,
-    points: InBody[int | None] = None,
+    name: Annotated[str | None, Body()] = None,
+    time: Annotated[datetime | None, Body()] = None,
+    problem: Annotated[ID | None, Body()] = None,
+    points: Annotated[int | None, Body()] = None,
 ) -> ScheduledMatch:
     match = unwrap(db.get(ScheduledMatch, id))
     if name is not None:
@@ -1039,9 +1054,7 @@ def delete_results(*, db: Database, id: ID) -> None:
     db.commit()
 
 
-@admin.post(
-    "/match/result", tags=["match"], response_model=schemas.MatchResult
-)
+@admin.post("/match/result", tags=["match"], response_model=schemas.MatchResult)
 def add_result(
     *,
     db: Database,
@@ -1080,9 +1093,7 @@ def add_result(
     return db_res
 
 
-@admin.put(
-    "/match/result/{id}", tags=["match"], response_model=schemas.MatchResult
-)
+@admin.put("/match/result/{id}", tags=["match"], response_model=schemas.MatchResult)
 def update_result(
     db: Database,
     id: UUID,
@@ -1128,9 +1139,7 @@ def update_result(
 # *******************************************************************************
 
 
-@router.get(
-    "/extrapoints", tags=["extrapoints"], response_model=list[schemas.ExtraPoints]
-)
+@router.get("/extrapoints", tags=["extrapoints"], response_model=list[schemas.ExtraPoints])
 def get_extra_points(
     db: Database, login: LoggedIn, tournament: UUID | None = None, tag: str | None = None
 ) -> Sequence[ExtraPoints]:
@@ -1145,11 +1154,11 @@ def get_extra_points(
 @admin.post("/extrapoints", tags=["extrapoints"])
 def create_extra_points(
     db: Database,
-    time: InBody[datetime],
+    time: Annotated[datetime, Body()],
     tag: Str32,
-    team: InBody[UUID],
-    points: InBody[float],
-    description: InBody[str] = "",
+    team: Annotated[UUID, Body()],
+    points: Annotated[float, Body()],
+    description: Annotated[str, Body()] = "",
 ) -> ExtraPoints:
     t = Team.get_unwrap(db, team)
     new = ExtraPoints(time=time, tag=tag, team=t, points=points, description=description)
@@ -1162,11 +1171,11 @@ def create_extra_points(
 def edit_extra_points(
     db: Database,
     id: UUID,
-    time: InBody[datetime | None] = None,
-    tag: InBody[Str32 | None] = None,
-    team: InBody[UUID | None] = None,
-    points: InBody[float | None] = None,
-    description: InBody[str | None] = None,
+    time: Annotated[datetime | None, Body()] = None,
+    tag: Annotated[Str32 | None, Body()] = None,
+    team: Annotated[UUID | None, Body()] = None,
+    points: Annotated[float | None, Body()] = None,
+    description: Annotated[str | None, Body()] = None,
 ) -> ExtraPoints:
     obj = ExtraPoints.get_unwrap(db, id)
     if time is not None:

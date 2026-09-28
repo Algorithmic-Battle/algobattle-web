@@ -32,7 +32,7 @@ async function saveEdit() {
   if (settings.value) {
     try {
       await editServerSettings({
-        ...settings.value,
+        bodyEditServerSettings: settings.value,
         upload_file_limit: settings.value.upload_file_limit_text,
       });
       state.value = "success";

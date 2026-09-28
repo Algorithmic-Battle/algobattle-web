@@ -48,10 +48,12 @@ async function sendData() {
   if (editData.value.id) {
     const result = await editSchedule({
       id: editData.value.id,
-      time: editData.value.time,
-      problem: editData.value.problem,
-      points: editData.value.points,
-      name: editData.value.name,
+      bodyEditSchedule: {
+        time: editData.value.time,
+        problem: editData.value.problem,
+        points: editData.value.points,
+        name: editData.value.name,
+      },
     });
     newMatch = result.data ?? null;
   } else {

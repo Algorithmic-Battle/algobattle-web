@@ -52,6 +52,10 @@ export default defineConfig({
         "/api": {
             target: "http://dev-backend:8000",
         },
+        "/algobattle/api": {
+            target: "http://dev-backend:8000",
+            rewrite: (path) => path.replace(/^\algobattle/, ""),
+        },
     },
     watch: {
         usePolling: true,

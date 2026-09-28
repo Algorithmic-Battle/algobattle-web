@@ -112,26 +112,31 @@ async def lifespan(app: FastAPI):
             root = User(email="", name="Root", is_admin=True)
             db.add(root)
             db.commit()
-        print(f"Root user login link:\n{EnvConfig.get().base_url}?login_token={root.login_token(db)}")
+        print(
+            f"Root user login link:\n{EnvConfig.get().base_url}?login_token={root.login_token(db)}"
+        )
     yield
 
 
 def generate_route_name(route: APIRoute) -> str:
     return route.name
 
-app = FastAPI(lifespan=lifespan, generate_unique_id_function=generate_route_name)
+
+app = FastAPI(
+    lifespan=lifespan,
+    generate_unique_id_function=generate_route_name,
+    root_path="/algobattle",
+)
 
 
 @app.exception_handler(RequestValidationError)
 def err_handler(request: Request, e: RequestValidationError):
     return JSONResponse(
         status_code=422,
-        content=jsonable_encoder(
-            {
-                "detail": e.errors(),
-                "body": e.body,
-            }
-        ),
+        content=jsonable_encoder({
+            "detail": e.errors(),
+            "body": e.body,
+        }),
     )
 
 
@@ -144,14 +149,12 @@ def perm_err(request: Request, e: PermissionError):
 def val_taken_err(request: Request, e: ValueTaken):
     return JSONResponse(
         status_code=409,
-        content=jsonable_encoder(
-            {
-                "type": "value_taken",
-                "field": e.field,
-                "value": e.value,
-                "object": e.object,
-            }
-        ),
+        content=jsonable_encoder({
+            "type": "value_taken",
+            "field": e.field,
+            "value": e.value,
+            "object": e.object,
+        }),
     )
 
 
@@ -161,9 +164,16 @@ for route in app.routes:
         route.operation_id = route.name
 
 
+dummy_origins = [
+    "http://www.algobattle.org",
+    "https://www.algobattle.org",
+    "http://tcs.rwth-aachen.de",
+    "https://tcs.rwth-aachen.de",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[EnvConfig.get().base_url],
+    allow_origins=[EnvConfig.get().base_url, *dummy_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

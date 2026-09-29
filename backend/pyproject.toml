@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "algobattle_web"
-version = "0.18.0"
+version = "0.18.1"
 requires-python = "~=3.14.0"
 license = {text = "MIT"}
 authors = [{name = "Imogen Hergeth"}, {name = "Henri Lotze"}]
@@ -16,7 +16,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "algobattle-base==4.3.5",
+    "algobattle-base==4.4.0",
     "uvicorn~=0.54.0",
     "fastapi~=0.141.1",
     "python-jose[cryptography]~=3.5.0",

@@ -28,3 +28,5 @@ export function problemURL(problem: Problem): string {
   const name = encodeURIComponent(problem.name);
   return `/problems/${tournamentStr}/${name}`;
 }
+
+export const baseUrl = import.meta.env.BASE_URL;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterView, useRouter } from "vue-router";
 import PageNavbarIcon from "./components/HomeNavbarIcon.vue";
-import { store } from "@/shared";
+import { store, baseUrl } from "@/shared";
 import { type Team, editUserSettings, getSelf, getServerSettings, getToken } from "@client";
 import LoginPane from "./components/LoginPane.vue";
 import { useCookies } from "@vueuse/integrations/useCookies";
@@ -121,7 +121,7 @@ onMounted(async () => {
             >Admin panel</PageNavbarIcon
           >
           <li class="nav-item mx-2">
-            <a href="/docs/tutorial/" class="nav-link align-middle"><i class="me-1 bi bi-book" />User Guide</a>
+            <a :href="baseUrl + '/docs/tutorial/'" class="nav-link align-middle"><i class="me-1 bi bi-book" />User Guide</a>
           </li>
         </ul>
 

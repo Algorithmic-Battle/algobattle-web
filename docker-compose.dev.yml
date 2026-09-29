@@ -38,6 +38,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     stop_signal: SIGKILL
+    environment:
+      - ALGOBATTLE_BASE_URL=${ALGOBATTLE_BASE_URL}
     volumes:
       - ./frontend/public/:/algobattle/public/
       - ./frontend/src/:/algobattle/src/

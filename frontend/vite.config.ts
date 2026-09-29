@@ -3,9 +3,12 @@ import vue from '@vitejs/plugin-vue'
 import { heyApiPlugin } from '@hey-api/vite-plugin';
 import { resolve } from 'path'
 
+const baseUrl = new URL(process.env.ALGOBATTLE_BASE_URL).pathname;
+
 // https://vitejs.dev/config/
-export default defineConfig({
-  base: "",
+const config = {
+  base: baseUrl,
+  envPrefix: "ALGOBATTLE_",
   plugins: [
     heyApiPlugin({
       config: {
@@ -13,7 +16,10 @@ export default defineConfig({
         output: './typescript_client',
         plugins: [
             "@hey-api/typescript",
-            '@hey-api/client-fetch',
+            {
+                name: '@hey-api/client-fetch',
+                baseUrl: baseUrl,
+            },
             {
                 name: '@hey-api/sdk',
                 paramsStructure: "flat",
@@ -52,13 +58,16 @@ export default defineConfig({
         "/api": {
             target: "http://dev-backend:8000",
         },
-        "/algobattle/api": {
-            target: "http://dev-backend:8000",
-            rewrite: (path) => path.replace(/^\algobattle/, ""),
-        },
     },
     watch: {
         usePolling: true,
     },
   },
-})
+}
+
+config.server.proxy[`${baseUrl}/api`] = {
+    target: "http://dev-backend:8000",
+    rewrite: (path) => path.replace(baseUrl, ""),
+}
+
+export default defineConfig(config)

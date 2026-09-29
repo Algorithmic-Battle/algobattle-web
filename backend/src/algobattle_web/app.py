@@ -125,7 +125,6 @@ def generate_route_name(route: APIRoute) -> str:
 app = FastAPI(
     lifespan=lifespan,
     generate_unique_id_function=generate_route_name,
-    root_path="/algobattle",
 )
 
 

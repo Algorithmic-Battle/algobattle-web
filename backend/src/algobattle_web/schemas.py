@@ -100,8 +100,6 @@ class Problem(Base):
     description: str
     image: DbFile | None = None
     colour: str
-    # property is defined on db model to make it have access to the tournament name
-    link: str
 
 
 class Report(Base):

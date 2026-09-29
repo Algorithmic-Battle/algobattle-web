@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { heyApiPlugin } from '@hey-api/vite-plugin';
 import { resolve } from 'path'
 
-const baseUrl = new URL(process.env.ALGOBATTLE_BASE_URL).pathname;
+const baseUrl = new URL(process.env.ALGOBATTLE_BASE_URL).pathname.replace(/\/$/, "");
 
 // https://vitejs.dev/config/
 const config = {
@@ -65,7 +65,7 @@ const config = {
   },
 }
 
-config.server.proxy[`${baseUrl.replace(/\/$/, "")}/api`] = {
+config.server.proxy[`${baseUrl}/api`] = {
     target: "http://dev-backend:8000",
     rewrite: (path) => path.replace(baseUrl, ""),
 }

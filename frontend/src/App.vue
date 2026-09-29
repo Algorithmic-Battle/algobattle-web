@@ -121,7 +121,7 @@ onMounted(async () => {
             >Admin panel</PageNavbarIcon
           >
           <li class="nav-item mx-2">
-            <a href="docs/tutorial" class="nav-link align-middle"><i class="me-1 bi bi-book" />User Guide</a>
+            <a href="/docs/tutorial/" class="nav-link align-middle"><i class="me-1 bi bi-book" />User Guide</a>
           </li>
         </ul>
 

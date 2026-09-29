@@ -16,6 +16,8 @@ COPY frontend/env.d.ts frontend/index.html frontend/tsconfig.json frontend/tscon
 COPY --from=api_builder /code/openapi.json openapi.json
 COPY frontend/public public/
 COPY frontend/src src/
+ARG ALGOBATTLE_BASE_URL
+ENV ALGOBATTLE_BASE_URL=${ALGOBATTLE_BASE_URL}
 RUN npm run build
 
 FROM nginx

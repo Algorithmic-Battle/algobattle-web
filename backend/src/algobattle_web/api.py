@@ -77,8 +77,6 @@ type Str32 = Annotated[str, Body(max_length=32)]
 type Str64 = Annotated[str, Body(max_length=64)]
 type Str128 = Annotated[str, Body(max_length=128)]
 type Str256 = Annotated[str, Body(max_length=256)]
-type InForm[T] = Annotated[T, Form()]
-type InBody[T] = Annotated[T, Body()]
 type DBSession = Annotated[Session, Depends(get_db)]
 SQL_LIMIT = 50
 
@@ -410,13 +408,11 @@ def edit_server_settings(
     user_change_email: Annotated[bool | None, Body()] = None,
     team_change_name: Annotated[bool | None, Body()],
     email_config: Annotated[EmailConfig | None, Body()] = None,
-    upload_file_limit: InBody[
-        Annotated[
-            ByteSize,
-            Interval(ge=0, le=2_000_000_000),
-            WithJsonSchema(TypeAdapter(str).json_schema()),
-        ]
-        | None
+    upload_file_limit: Annotated[
+        ByteSize | None,
+        Body(),
+        Interval(ge=0, le=2_000_000_000),
+        WithJsonSchema(TypeAdapter(str).json_schema()),
     ] = None,
 ) -> None:
     settings = ServerSettings.get(db)
@@ -697,14 +693,14 @@ def create_problem(
     *,
     db: Database,
     problem: UploadFile | UUID,
-    name: str = Form(),
-    tournament: InForm[ID],
-    start: InForm[datetime | None] = None,
-    end: InForm[datetime | None] = None,
+    name: Annotated[str, Form()],
+    tournament: Annotated[ID, Form()],
+    start: Annotated[datetime | None, Form()] = None,
+    end: Annotated[datetime | None, Form()] = None,
     image: UploadFile | None = None,
-    alt_text: InForm[str] = "",
-    description: InForm[str] = "",
-    color: InForm[str] = "#ffffff",
+    alt_text: Annotated[str, Form()] = "",
+    description: Annotated[str, Form()] = "",
+    color: Annotated[str, Form()] = "#ffffff",
     background_tasks: BackgroundTasks,
 ) -> str:
     tournament_obj = unwrap(db.get(Tournament, tournament))
@@ -749,15 +745,15 @@ def edit_problem(
     *,
     db: Database,
     id: ID,
-    name: InForm[str | None] = None,
-    tournament: InForm[ID | None] = None,
-    start: InForm[datetime | Remove | None] = None,
-    end: InForm[datetime | Remove | None] = None,
-    description: InForm[str | None] = None,
-    alt_text: InForm[str | None] = None,
-    colour: InForm[str | None] = None,
+    name: Annotated[str | None, Form()] = None,
+    tournament: Annotated[ID | None, Form()] = None,
+    start: Annotated[datetime | Remove | None, Form()] = None,
+    end: Annotated[datetime | Remove | None, Form()] = None,
+    description: Annotated[str | None, Form()] = None,
+    alt_text: Annotated[str | None, Form()] = None,
+    colour: Annotated[str | None, Form()] = None,
     file: UploadFile | None = None,
-    image: UploadFile | InForm[Remove] | None = None,
+    image: UploadFile | Annotated[Remove, Form()] | None = None,
     tasks: BackgroundTasks,
 ) -> Problem:
     problem = unwrap(db.get(Problem, id))
@@ -1061,10 +1057,10 @@ def add_result(
     status: MatchStatus,
     time: datetime,
     problem: UUID,
-    teams: InForm[list[UUID]],
-    generators: InForm[list[UUID | None | Literal["undefined"]]],
-    solvers: InForm[list[UUID | None | Literal["undefined"]]],
-    points: InForm[list[float]],
+    teams: Annotated[list[UUID], Form()],
+    generators: Annotated[list[UUID | None | Literal["undefined"]], Form()],
+    solvers: Annotated[list[UUID | None | Literal["undefined"]], Form()],
+    points: Annotated[list[float], Form()],
     logs: UploadFile | None = None,
 ) -> MatchResult:
     if logs is not None and logs.size and ServerSettings.get(db).upload_file_limit < logs.size:
@@ -1097,13 +1093,15 @@ def add_result(
 def update_result(
     db: Database,
     id: UUID,
-    time: InForm[datetime],
-    problem: InForm[UUID],
-    status: InForm[MatchStatus],
-    teams: InForm[list[UUID]],
-    generators: InForm[list[UUID | None | Literal["undefined"]]],  # hack to make form parsing work
-    solvers: InForm[list[UUID | None | Literal["undefined"]]],
-    points: InForm[list[float]],
+    time: Annotated[datetime, Form()],
+    problem: Annotated[UUID, Form()],
+    status: Annotated[MatchStatus, Form()],
+    teams: Annotated[list[UUID], Form()],
+    generators: Annotated[
+        list[UUID | None | Literal["undefined"]], Form()
+    ],  # hack to make form parsing work
+    solvers: Annotated[list[UUID | None | Literal["undefined"]], Form()],
+    points: Annotated[list[float], Form()],
     logs: UploadFile | UUID | None = None,
 ) -> MatchResult:
     res = MatchResult.get_unwrap(db, id)

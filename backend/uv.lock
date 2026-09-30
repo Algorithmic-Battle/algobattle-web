@@ -18,7 +18,7 @@ wheels = [
 
 [[package]]
 name = "algobattle-base"
-version = "4.3.5"
+version = "4.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -29,14 +29,14 @@ dependencies = [
     { name = "typer" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/c1/86ac607661dda37ef409426741ac7c613d287bb0a059b40b4b7553dbc193/algobattle_base-4.3.5.tar.gz", hash = "sha256:2293ce0621c6a88c00aa8fd41645101df09ede348dc64a022083ea3e020120f2", size = 55184, upload-time = "2026-09-21T14:45:37.297Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d1/12/c52f02ce26c7fdd86cc7b5605321e1595c0b47035163ef39e238659f8d77/algobattle_base-4.4.1.tar.gz", hash = "sha256:84d54bbef3c16e740dd21bd47348a0d331c15f4991280bb4911d7795745c1086", size = 55574, upload-time = "2026-09-30T13:00:56.504Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/2a/dc4663be71cd6d2f888f1447b1a7bda4b5d32e9c853052268b2b5079fe54/algobattle_base-4.3.5-py3-none-any.whl", hash = "sha256:307443859969a367ab26dc6b12fcbcbc5ed8b94a9bd5ea242e4e68ff5ed5aa1e", size = 72077, upload-time = "2026-09-21T14:45:36.125Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/1c/8a08fa20b21d9ade0abd898fc341dd67c1590086bd83dda7e08fb7a9b370/algobattle_base-4.4.1-py3-none-any.whl", hash = "sha256:533fdedfb43076d722c2d68f393e04a058bba8edecd48a8856a8056c160e70bf", size = 72415, upload-time = "2026-09-30T13:00:55.227Z" },
 ]
 
 [[package]]
 name = "algobattle-web"
-version = "0.18.0"
+version = "0.18.2"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -60,7 +60,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = "~=1.20.0" },
-    { name = "algobattle-base", specifier = "==4.3.5" },
+    { name = "algobattle-base", specifier = "==4.4.1" },
     { name = "fastapi", specifier = "~=0.141.1" },
     { name = "markdown", specifier = "~=3.11" },
     { name = "mysqlclient", specifier = "~=2.3.0" },

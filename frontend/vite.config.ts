@@ -1,12 +1,12 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type UserConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { heyApiPlugin } from '@hey-api/vite-plugin';
 import { resolve } from 'path'
 
-const baseUrl = new URL(process.env.ALGOBATTLE_BASE_URL).pathname.replace(/\/$/, "");
+const baseUrl = new URL(process.env.ALGOBATTLE_BASE_URL ?? "/").pathname.replace(/\/$/, "");
 
 // https://vitejs.dev/config/
-const config = {
+const config: UserConfig = {
   base: baseUrl,
   envPrefix: "ALGOBATTLE_",
   plugins: [
@@ -19,6 +19,7 @@ const config = {
             {
                 name: '@hey-api/client-fetch',
                 baseUrl: baseUrl,
+                throwOnError: true,
             },
             {
                 name: '@hey-api/sdk',
@@ -65,9 +66,9 @@ const config = {
   },
 }
 
-config.server.proxy[`${baseUrl}/api`] = {
+config.server!.proxy![`${baseUrl}/api`] = {
     target: "http://dev-backend:8000",
-    rewrite: (path) => path.replace(baseUrl, ""),
+    rewrite: (path: String) => path.replace(baseUrl, ""),
 }
 
 export default defineConfig(config)

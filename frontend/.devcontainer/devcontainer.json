@@ -26,5 +26,8 @@
       ]
     }
   },
+  "containerEnv": {
+    "ALGOBATTLE_BASE_URL": "https://localhost/algobattle/"
+  },
   "remoteUser": "node"
 }

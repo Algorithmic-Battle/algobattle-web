@@ -138,25 +138,29 @@ async function sendData() {
   if (editData.value.id) {
     res = await updateResult({
       id: editData.value.id,
-      problem: editData.value.problem!,
-      status: editData.value.status!,
-      time: editData.value.time!,
-      teams: editData.value.participants.filter((p) => !!p.team_id).map((p) => p.team_id as string) as any,
-      generators: editData.value.participants.filter((p) => !!p.generator?.id).map((p) => p.generator!.id) as any,
-      solvers: editData.value.participants.filter((p) => !!p.solver?.id).map((p) => p.solver!.id) as any,
-      points: editData.value.participants.map((p) => p.points ?? 0) as any,
-      bodyUpdateResult: { logs: editData.value.newLogs },
+      bodyUpdateResult: {
+        problem: editData.value.problem!,
+        status: editData.value.status!,
+        time: editData.value.time!,
+        teams: editData.value.participants.filter((p) => !!p.team_id).map((p) => p.team_id as string) as any,
+        generators: editData.value.participants.filter((p) => !!p.generator?.id).map((p) => p.generator!.id) as any,
+        solvers: editData.value.participants.filter((p) => !!p.solver?.id).map((p) => p.solver!.id) as any,
+        points: editData.value.participants.map((p) => p.points ?? 0) as any,
+        logs: editData.value.newLogs
+      },
     });
   } else {
     res = await addResult({
-      problem: editData.value.problem!,
       status: editData.value.status!,
       time: editData.value.time!,
-      teams: editData.value.participants.filter((p) => !!p.team_id).map((p) => p.team_id as string) as any,
-      generators: editData.value.participants.filter((p) => !!p.generator?.id).map((p) => p.generator!.id) as any,
-      solvers: editData.value.participants.filter((p) => !!p.solver?.id).map((p) => p.solver!.id) as any,
-      points: editData.value.participants.map((p) => p.points ?? 0) as any,
-      bodyAddResult: { logs: editData.value.newLogs },
+      problem: editData.value.problem!,
+      bodyAddResult: {
+        logs: editData.value.newLogs,
+        teams: editData.value.participants.filter((p) => !!p.team_id).map((p) => p.team_id as string) as any,
+        generators: editData.value.participants.filter((p) => !!p.generator?.id).map((p) => p.generator!.id) as any,
+        solvers: editData.value.participants.filter((p) => !!p.solver?.id).map((p) => p.solver!.id) as any,
+        points: editData.value.participants.map((p) => p.points ?? 0) as any,
+      },
     });
   }
   const resultData = (res.data ?? null) as MatchResult | null;

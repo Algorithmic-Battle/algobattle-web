@@ -148,14 +148,14 @@ async function submitEdit() {
   const prob = editProblem.value!;
   const result = await editProblemRequest({
     id: problem.value!.id,
-    name: prob.name,
-    tournament: prob.tournament.id,
-    start: prob.start || "remove",
-    end: prob.end || "remove",
-    description: prob.description,
-    alt_text: prob.alt,
-    colour: prob.colour,
     bodyEditProblem: {
+      name: prob.name,
+      tournament: prob.tournament.id,
+      start: prob.start || "remove",
+      end: prob.end || "remove",
+      description: prob.description,
+      alt_text: prob.alt,
+      colour: prob.colour,
       file: convertFileEdit(prob.file),
       image: convertFileEdit(prob.image),
     },

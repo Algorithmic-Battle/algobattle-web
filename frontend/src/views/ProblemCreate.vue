@@ -41,17 +41,19 @@ async function submitCreateProblem() {
   }
   try {
     const { file, copyFrom, ...payload } = data.value;
-    const result = await createProblemRequest({
+    const problem = file ?? copyFrom;
+    if (!problem) {
+      error.value.type = "missing";
+      return;
+    }
+    const result = await createProblemRequest({bodyCreateProblem: {
       tournament: store.tournament.id,
-      start: payload.start,
-      end: payload.end,
       alt_text: payload.alt,
-      description: payload.description,
-      color: payload.color,
-      bodyCreateProblem: { file: file ?? copyFrom, ...payload } as any,
-    });
+      problem: problem,
+      ...payload
+    }});
     const location = result.data ?? "/";
-    router.push(location as string);
+    router.push(location);
   } catch {
     error.value.type = "server";
   }

@@ -21,13 +21,17 @@ const queryToken = computed(() => {
 });
 watch(queryToken, async (newToken) => {
   if (newToken) {
-    const result = await getToken({ login_token: newToken });
-    if (result.error || !result.data) {
+    let result;
+    try {
+      result = (await getToken({ login_token: newToken })).data;
+    } catch {
       return;
     }
-    cookies.set("algobattle_user_token", result.data.token, { expires: new Date(result.data.expires) });
+    cookies.set("algobattle_user_token", result.token, {
+      expires: new Date(result.expires),
+    });
     client.setConfig({
-      headers: { "X-User-Token": result.data.token },
+      headers: { "X-User-Token": result.token },
     });
     router.replace({ path: router.currentRoute.value.path });
   }
@@ -44,17 +48,15 @@ watch(
     if (token) {
       try {
         const response = await getSelf();
-        if (!response.error && response.data) {
-          store.user = response.data.user;
-          store.team = response.data.team;
-          store.tournament = response.data.tournament;
-          return;
-        }
+        store.user = response.data.user;
+        store.team = response.data.team;
+        store.tournament = response.data.tournament;
       } catch {}
+      return;
     }
     store.user = null;
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 async function logout() {
@@ -68,7 +70,7 @@ async function selectTeam(team: Team | "admin") {
   if (team == "admin" && !store.user?.is_admin) {
     return;
   }
-  await editUserSettings({ bodyEditUserSettings: { team: team == "admin" ? "admin" : team.id }});
+  await editUserSettings({ bodyEditUserSettings: { team: team == "admin" ? "admin" : team.id } });
   router.go(0);
 }
 
@@ -85,11 +87,13 @@ const displayName = computed(() => {
 });
 
 onMounted(async () => {
-  const result = await getServerSettings();
-  if (!result.error) {
-    store.serverSettings = result.data ?? undefined;
+  try {
+    const result = await getServerSettings();
+    store.serverSettings = result.data;
+  } catch {
+    store.serverSettings = undefined;
   }
-})
+});
 </script>
 
 <template>
@@ -121,7 +125,9 @@ onMounted(async () => {
             >Admin panel</PageNavbarIcon
           >
           <li class="nav-item mx-2">
-            <a :href="baseUrl + '/docs/tutorial/'" class="nav-link align-middle"><i class="me-1 bi bi-book" />User Guide</a>
+            <a :href="baseUrl + '/docs/tutorial/'" class="nav-link align-middle"
+              ><i class="me-1 bi bi-book" />User Guide</a
+            >
           </li>
         </ul>
 
@@ -137,7 +143,9 @@ onMounted(async () => {
             <i class="bi bi-person-circle me-2"></i> <strong>{{ displayName }}</strong>
           </a>
           <ul v-if="store.user" class="dropdown-menu" id="loggedInDropdown">
-            <li><RouterLink class="dropdown-item" :to="{name: 'settings'}">Settings</RouterLink></li>
+            <li>
+              <RouterLink class="dropdown-item" :to="{ name: 'settings' }">Settings</RouterLink>
+            </li>
             <template v-if="store.user.teams.length >= (store.user.is_admin ? 1 : 2)">
               <li><hr class="dropdown-divider" /></li>
               <li class="dropdown-header">View as</li>

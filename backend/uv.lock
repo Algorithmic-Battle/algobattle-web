@@ -18,7 +18,7 @@ wheels = [
 
 [[package]]
 name = "algobattle-base"
-version = "4.4.1"
+version = "4.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -29,9 +29,9 @@ dependencies = [
     { name = "typer" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d1/12/c52f02ce26c7fdd86cc7b5605321e1595c0b47035163ef39e238659f8d77/algobattle_base-4.4.1.tar.gz", hash = "sha256:84d54bbef3c16e740dd21bd47348a0d331c15f4991280bb4911d7795745c1086", size = 55574, upload-time = "2026-09-30T13:00:56.504Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/12/8992068414d680f19eaa141d2ddc5bbf9844bbb1734418ad3699bb5f677f/algobattle_base-4.4.2.tar.gz", hash = "sha256:a66192c8d26f201338ef96a932a1c56972a63a101a0d2d2f33bfab4e12fc6c4c", size = 55577, upload-time = "2026-10-02T10:19:31.972Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/1c/8a08fa20b21d9ade0abd898fc341dd67c1590086bd83dda7e08fb7a9b370/algobattle_base-4.4.1-py3-none-any.whl", hash = "sha256:533fdedfb43076d722c2d68f393e04a058bba8edecd48a8856a8056c160e70bf", size = 72415, upload-time = "2026-09-30T13:00:55.227Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/ef/dfa9bc8a586e7f6393ae53b859fceabebc0a901637f8237a4c5c77c34f36/algobattle_base-4.4.2-py3-none-any.whl", hash = "sha256:2acab088894068eaa4b39be7a8ad6e83bc2b152bbd40aaf5b290f0446554f00c", size = 72416, upload-time = "2026-10-02T10:19:30.688Z" },
 ]
 
 [[package]]
@@ -60,7 +60,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = "~=1.20.0" },
-    { name = "algobattle-base", specifier = "==4.4.1" },
+    { name = "algobattle-base", specifier = "==4.4.2" },
     { name = "fastapi", specifier = "~=0.141.1" },
     { name = "markdown", specifier = "~=3.11" },
     { name = "mysqlclient", specifier = "~=2.3.0" },

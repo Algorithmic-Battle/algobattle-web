@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { store, type ModelDict, problemURL } from "@/shared";
+import { store, type ModelDict, problemURL, formatDateTime } from "@/shared";
 import { createSchedule, deleteSchedule as deleteScheduleRequest, editSchedule, getProblems, login, scheduledMatches } from "@client";
 import { Modal } from "bootstrap";
 import type { ScheduledMatch, Problem, ScheduleAffects } from "@client";
@@ -83,7 +83,7 @@ const previewTimes = computed(() => {
       days: { days: interval },
       weeks: { weeks: interval },
     }[repeatIntervalUnit.value];
-    return firstTime.add(duration).toLocaleString();
+    return formatDateTime(firstTime.add(duration));
   });
 });
 
@@ -197,7 +197,7 @@ async function deleteMatch() {
       <tbody>
         <tr v-for="match in sortedMatches" :match="match" :key="match.id">
           <td>{{ match.name }}</td>
-          <td>{{ match.time.toLocaleString() }}</td>
+          <td>{{ formatDateTime(match.time) }}</td>
           <td>
             <RouterLink :to="problemURL(problems[match.problem])">{{ problems[match.problem].name }}</RouterLink>
           </td>
@@ -317,7 +317,7 @@ async function deleteMatch() {
                 </span>
                 <ul v-if="affectedMatches.length" class="mb-0">
                   <li v-for="match in affectedMatches" :key="match.id">
-                    {{ match.name || "Unnamed match" }} — {{ match.time.toLocaleString() }}
+                    {{ match.name || "Unnamed match" }} — {{ formatDateTime(match.time) }}
                   </li>
                 </ul>
                 <div v-else class="text-muted">No matches will be affected.</div>

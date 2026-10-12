@@ -12,7 +12,7 @@ import {
   getTeams,
 } from "@client";
 import type { Tournament, Report, Problem, Team, ProblemPageData, DbFile } from "@client";
-import { store, type InputFileEvent, type ModelDict } from "@/shared";
+import { formatDateTime, store, type InputFileEvent, type ModelDict } from "@/shared";
 import { onMounted, ref, type Ref } from "vue";
 import { useRoute } from "vue-router";
 import router from "@/router";
@@ -250,10 +250,10 @@ async function deleteSelectedProblem() {
               {{ problem.description }}
             </li>
             <li v-if="problem.start" class="list-group-item bg-body-tertiary">
-              Start: {{ problem.start.toLocaleString() }}
+              Start: {{ formatDateTime(problem.start) }}
             </li>
             <li v-if="problem.end" class="list-group-item bg-body-tertiary">
-              End: {{ problem.end.toLocaleString() }}
+              End: {{ formatDateTime(problem.end) }}
             </li>
             <li class="list-group-item bg-body-tertiary">
               <a

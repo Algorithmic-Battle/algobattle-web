@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { store } from "@/shared";
+import { formatDateTime, store } from "@/shared";
 import { computed, onMounted, ref } from "vue";
 import {
   type Problem,
@@ -123,7 +123,7 @@ function until(timestamp: Temporal.Instant): string {
                 <td>
                   Using generator
                   {{
-                    generator.name ? generator.name : "uploaded at " + generator.creation_time.toLocaleString()
+                    generator.name ? generator.name : "uploaded at " + formatDateTime(generator.creation_time)
                   }}
                 </td>
               </tr>
@@ -133,7 +133,7 @@ function until(timestamp: Temporal.Instant): string {
               <tr v-if="solver">
                 <td>
                   Using solver
-                  {{ solver.name ? solver.name : "uploaded at " + solver.creation_time.toLocaleString() }}
+                  {{ solver.name ? solver.name : "uploaded at " + formatDateTime(solver.creation_time) }}
                 </td>
               </tr>
               <tr v-else-if="store.team instanceof Object">

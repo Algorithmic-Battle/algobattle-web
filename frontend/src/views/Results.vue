@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { store, type ModelDict, problemURL } from "@/shared";
+import { store, type ModelDict, problemURL, formatDateTime } from "@/shared";
 import {
   addResult,
   createExtraPoints,
@@ -502,7 +502,7 @@ function makeFreeform() {
                       v-for="prog in programs[editData.problem + participant.team_id + 'generator']"
                       :value="prog"
                     >
-                      {{ `${prog.name}(${prog.creation_time.toLocaleString()})` }}
+                      {{ `${prog.name}(${formatDateTime(prog.creation_time)})` }}
                     </option>
                   </select>
                 </td>
@@ -520,7 +520,7 @@ function makeFreeform() {
                       v-for="prog in programs[editData.problem + participant.team_id + 'solver']"
                       :value="prog"
                     >
-                      {{ `${prog.name}(${prog.creation_time.toLocaleString()})` }}
+                      {{ `${prog.name}(${formatDateTime(prog.creation_time)})` }}
                     </option>
                   </select>
                 </td>

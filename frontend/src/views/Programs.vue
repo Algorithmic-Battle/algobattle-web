@@ -6,7 +6,7 @@ import {
   searchProgram,
   uploadProgram as uploadProgramRequest,
 } from "@client";
-import { store, type ModelDict } from "@/shared";
+import { formatDateTime, store, type ModelDict } from "@/shared";
 import { Modal } from "bootstrap";
 import type { Problem, Program, Team } from "@client";
 import { computed, onMounted, ref, watch } from "vue";
@@ -140,7 +140,7 @@ onMounted(() => {
           <td>{{ problems[program.problem].name }}</td>
           <td v-if="store.team == 'admin'">{{ teams[program.team].name }}</td>
           <td>{{ program.role }}</td>
-          <td>{{ program.creation_time.toLocaleString() }}</td>
+          <td>{{ formatDateTime(program.creation_time) }}</td>
           <td>{{ program.name }}</td>
           <td>
             <a

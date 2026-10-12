@@ -19,6 +19,10 @@ export const store = reactive<{
   tournament: null,
 });
 
+export function formatDateTime(time: Temporal.Instant | Temporal.ZonedDateTime): string {
+    return time.toLocaleString("de-DE", {dateStyle: "medium", timeStyle: "short"})
+}
+
 export function problemURL(problem: Problem): string {
   const tournamentStr = encodeURIComponent(problem.tournament.name);
   const name = encodeURIComponent(problem.name);

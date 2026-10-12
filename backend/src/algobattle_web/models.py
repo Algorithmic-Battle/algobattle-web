@@ -82,7 +82,9 @@ type StrText = Annotated[str, mapped_column(Text)]
 type LoggedIn = Team | Literal["admin"] | None
 
 
-def replace_constants[S, **P, R](method: Callable[Concatenate[S, P], R]) -> Callable[Concatenate[S, P], R]:
+def replace_constants[S, **P, R](
+    method: Callable[Concatenate[S, P], R],
+) -> Callable[Concatenate[S, P], R]:
     def inner(s: S, *args: P.args, **kwargs: P.kwargs) -> R:
         res = method(s, *args, **kwargs)
         if isinstance(res, bool) and isinstance(s, type):
@@ -94,7 +96,6 @@ def replace_constants[S, **P, R](method: Callable[Concatenate[S, P], R]) -> Call
 
 # cant make it an ABC because of metaclass issues
 class PermissionCheck:
-
     @hybrid_method
     @abstractmethod
     def _visible(self, team: Team) -> bool:
@@ -103,7 +104,6 @@ class PermissionCheck:
     @hybrid_method
     def _editable(self, team: Team) -> bool:
         return True
-
 
     @hybrid_method
     @replace_constants
@@ -207,10 +207,21 @@ class Base(RawBase):
     def __hash__(self) -> int:
         return hash(self.id)
 
+    @overload
     @classmethod
-    def get_unwrap(cls, db: Session, id: ID) -> Self:
+    def get_unwrap(cls, db: Session, id: ID) -> Self: ...
+
+    @overload
+    @classmethod
+    def get_unwrap(cls, db: Session, id: None) -> None: ...
+
+    @classmethod
+    def get_unwrap(cls, db: Session, id: ID | None) -> Self | None:
         """Get the specified entry and raise an error if it does not exist."""
-        return unwrap(db.get(cls, id))
+        if id is None:
+            return None
+        else:
+            return unwrap(db.get(cls, id))
 
 
 class File(Base):
@@ -608,7 +619,6 @@ class Problem(Base, PermissionCheck):
     def _editable(self, team: Team) -> bool:
         return self.end is None or self.end >= datetime.now()
 
-
     @_editable.inplace.expression
     @classmethod
     def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
@@ -682,7 +692,16 @@ class Program(Base, PermissionCheck):
     problem: Mapped[Problem] = relationship(lazy="joined")
     problem_id: Mapped[UUID] = mapped_column(ForeignKey("problems.id"), init=False)
     creation_time: Mapped[datetime] = mapped_column(default_factory=datetime.now)
-    user_editable: Mapped[bool] = mapped_column(default=True)
+
+    results: Mapped[list[ResultParticipant]] = relationship(
+        init=False,
+        viewonly=True,
+        primaryjoin="or_(Program.id==ResultParticipant.generator_id, Program.id==ResultParticipant.solver_id)",
+    )
+
+    @property
+    def user_editable(self) -> bool:
+        return not bool(self.results)
 
     @hybrid_method
     def _visible(self, team: Team) -> bool:
@@ -695,7 +714,7 @@ class Program(Base, PermissionCheck):
     @_editable.inplace.expression
     @classmethod
     def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
-        return Program.user_editable & Program.problem.has(Problem._editable_sql(team))
+        return Program.results.any() & Program.problem.has(Problem._editable(team))
 
 
 type ScheduleAffects = Literal["current", "following", "all"]
@@ -731,9 +750,13 @@ class ResultParticipant(RawBase):
     team: Mapped[Team] = relationship()
     team_id: Mapped[ID] = mapped_column(ForeignKey("teams.id"), primary_key=True, init=False)
     generator_id: Mapped[ID | None] = mapped_column(ForeignKey("programs.id"), init=False)
-    generator: Mapped[Program | None] = relationship(foreign_keys=[generator_id])
+    generator: Mapped[Program | None] = relationship(
+        foreign_keys=[generator_id], back_populates="results"
+    )
     solver_id: Mapped[ID | None] = mapped_column(ForeignKey("programs.id"), init=False)
-    solver: Mapped[Program | None] = relationship(foreign_keys=[solver_id])
+    solver: Mapped[Program | None] = relationship(
+        foreign_keys=[solver_id], back_populates="results"
+    )
     points: Mapped[float]
 
     def __hash__(self) -> int:

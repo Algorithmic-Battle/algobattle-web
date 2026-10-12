@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { store, type ModelDict, formatDateTime, problemURL } from "@/shared";
+import { store, type ModelDict, problemURL } from "@/shared";
 import {
   addResult,
   createExtraPoints,
@@ -30,8 +30,9 @@ import { computed, onMounted, ref, toRaw, watch } from "vue";
 import DownloadButton from "@/components/DownloadButton.vue";
 import FileInput from "@/components/FileInput.vue";
 import ResultChart from "@/components/ResultChart.vue";
-import { DateTime } from "luxon";
 import DeleteButton from "@/components/DeleteButton.vue";
+import TimePicker from "@/components/TimePicker.vue";
+import { Temporal } from "temporal-polyfill";
 
 const activePage = ref<"results" | "extrapoints">("results");
 const problems = ref<ModelDict<Problem>>({});
@@ -41,15 +42,7 @@ const programs = ref<{ [key: string]: Program[] }>({});
 const chartState = ref(0);
 const sortedResults = computed(() => {
   const sorted = Object.values(resultsData.value);
-  sorted.sort((a, b) => {
-    if (a.time < b.time) {
-      return 1;
-    } else if (a.time > b.time) {
-      return -1;
-    } else {
-      return 0;
-    }
-  });
+  sorted.sort((a, b) => -Temporal.Instant.compare(a.time, b.time));
   return sorted;
 });
 
@@ -108,7 +101,7 @@ onMounted(async () => {
 interface EditData {
   id?: string;
   status: MatchStatus;
-  time?: string;
+  time?: Temporal.Instant | null;
   problem?: string;
   logs?: DbFile | null;
   participants: ResultParticipant[];
@@ -124,7 +117,11 @@ const editData = ref<EditData>({
 
 function openEdit(match: MatchResult | undefined) {
   editData.value = match
-    ? { ...structuredClone(toRaw(match)), time: match.time.slice(0, 19), confirmDelete: false }
+    ? {
+        ...structuredClone(toRaw(match)),
+        time: match.time,
+        confirmDelete: false,
+      }
     : {
         status: "complete",
         problem: undefined,
@@ -233,21 +230,26 @@ function openDetail(result: MatchResult) {
   detailModal.show();
 }
 
-const datetimeStep = computed(() => {
-  if (!editData.value.time) {
-    return 60;
-  }
-  return DateTime.fromISO(editData.value.time).second !== 0 ? 1 : 60;
-});
-
 const extrapoints = ref<ExtraPoints[]>([]);
-const extraEditData = ref<Partial<ExtraPoints> & { freeformTag?: boolean }>({});
+const extraEditData = ref<
+  Omit<Partial<ExtraPoints>, "time"> & {
+    time?: Temporal.Instant | null;
+    freeformTag?: boolean;
+  }
+>({});
 
 async function openExtraEdit(extra: ExtraPoints | undefined) {
   const freeform = tags.value.length === 0;
   extraEditData.value = extra
-    ? { ...extra, time: extra.time.slice(0, 19), freeformTag: freeform }
-    : { time: DateTime.now().startOf("minute").toISO({ includeOffset: false })!, freeformTag: freeform };
+    ? {
+        ...extra,
+        time: extra.time,
+        freeformTag: freeform,
+      }
+    : {
+        time: Temporal.Now.instant().round({ smallestUnit: "minute", roundingMode: "floor" }),
+        freeformTag: freeform,
+      };
   Modal.getOrCreateInstance("#extraPointsModal").show();
 }
 
@@ -256,7 +258,9 @@ async function sendExtraPointsData() {
     const res = await editExtraPoints({
       id: extraEditData.value.id,
       bodyEditExtraPoints: {
-        time: extraEditData.value.time,
+        time: extraEditData.value.time
+          ? extraEditData.value.time
+          : undefined,
         tag: extraEditData.value.tag,
         team: extraEditData.value.team?.id,
         points: extraEditData.value.points,
@@ -343,7 +347,7 @@ function makeFreeform() {
         </thead>
         <tbody>
           <tr v-for="result in sortedResults" :key="result.id">
-            <td>{{ formatDateTime(result.time) }}</td>
+            <td>{{ result.time }}</td>
             <td>
               <RouterLink v-if="problems[result.problem]" :to="problemURL(problems[result.problem])">{{ problems[result.problem].name }}</RouterLink>
             </td>
@@ -392,7 +396,7 @@ function makeFreeform() {
         </thead>
         <tbody>
           <tr v-for="extra in extrapoints" :key="extra.id">
-            <td>{{ formatDateTime(extra.time) }}</td>
+            <td>{{ extra.time }}</td>
             <td>{{ extra.tag }}</td>
             <td>{{ extra.team.name }}</td>
             <td>{{ extra.points }}</td>
@@ -442,13 +446,11 @@ function makeFreeform() {
         </div>
         <div class="modal-body">
           <label for="time" class="form-label">Time</label>
-          <input
+          <TimePicker
             id="time"
-            class="form-control"
-            type="datetime-local"
-            :step="datetimeStep"
+            step="60"
             required
-            v-model="editData.time"
+            v-model:time="editData.time"
           />
           <label for="problem" class="form-label">Problem</label>
           <select id="problem" class="form-select" required v-model="editData.problem" @click="selectProblem">
@@ -500,7 +502,7 @@ function makeFreeform() {
                       v-for="prog in programs[editData.problem + participant.team_id + 'generator']"
                       :value="prog"
                     >
-                      {{ `${prog.name}(${formatDateTime(prog.creation_time)})` }}
+                      {{ `${prog.name}(${prog.creation_time.toLocaleString()})` }}
                     </option>
                   </select>
                 </td>
@@ -518,7 +520,7 @@ function makeFreeform() {
                       v-for="prog in programs[editData.problem + participant.team_id + 'solver']"
                       :value="prog"
                     >
-                      {{ `${prog.name}(${formatDateTime(prog.creation_time)})` }}
+                      {{ `${prog.name}(${prog.creation_time.toLocaleString()})` }}
                     </option>
                   </select>
                 </td>
@@ -655,13 +657,11 @@ function makeFreeform() {
         </div>
         <div class="modal-body">
           <label for="extraTime" class="form-label">Time</label>
-          <input
-            id="extratime"
-            class="form-control"
-            type="datetime-local"
+          <TimePicker
+            id="extraTime"
             step="60"
             required
-            v-model="extraEditData.time"
+            v-model:time="extraEditData.time"
           />
           <label for="extraTag" class="form-label">Tag</label>
           <input

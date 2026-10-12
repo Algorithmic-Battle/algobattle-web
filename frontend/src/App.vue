@@ -8,6 +8,7 @@ import { useCookies } from "@vueuse/integrations/useCookies";
 import { computed, onMounted, watch } from "vue";
 import { Dropdown } from "bootstrap";
 import { client } from "@client/client.gen";
+import { Temporal } from "temporal-polyfill";
 
 const router = useRouter();
 const cookies = useCookies();
@@ -27,9 +28,11 @@ watch(queryToken, async (newToken) => {
     } catch {
       return;
     }
-    cookies.set("algobattle_user_token", result.token, {
-      expires: new Date(result.expires),
-    });
+    const maxAge = Math.max(
+      0,
+      Math.ceil(result.expires.since(Temporal.Now.instant()).total({ unit: "seconds" })),
+    );
+    cookies.set("algobattle_user_token", result.token, { maxAge });
     client.setConfig({
       headers: { "X-User-Token": result.token },
     });

@@ -1,15 +1,11 @@
 import { reactive } from "vue";
 import type { UserLogin, Team, Tournament, ServerSettings, Problem } from "@client";
-import { DateTime } from "luxon";
+import { Temporal } from "temporal-polyfill";
 
 export type ModelDict<T> = { [key: string]: T };
 
 export interface InputFileEvent extends InputEvent {
   target: HTMLInputElement;
-}
-
-export function formatDateTime(datetime: string): string {
-  return DateTime.fromISO(datetime).toLocaleString(DateTime.DATETIME_SHORT);
 }
 
 export const store = reactive<{
@@ -27,6 +23,19 @@ export function problemURL(problem: Problem): string {
   const tournamentStr = encodeURIComponent(problem.tournament.name);
   const name = encodeURIComponent(problem.name);
   return `/problems/${tournamentStr}/${name}`;
+}
+
+export function toLocalDateTimeInput(value: Temporal.Instant | null | undefined): string {
+  return value
+    ? value
+        .toZonedDateTimeISO(Temporal.Now.timeZoneId())
+        .toPlainDateTime()
+        .toString({ smallestUnit: "minute" })
+    : "";
+}
+
+export function fromLocalDateTimeInput(value: string): Temporal.Instant {
+  return Temporal.PlainDateTime.from(value).toZonedDateTime(Temporal.Now.timeZoneId()).toInstant();
 }
 
 export const baseUrl = import.meta.env.BASE_URL;

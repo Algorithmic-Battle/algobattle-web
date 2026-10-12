@@ -5,6 +5,8 @@ import router from "@/router";
 import type { Problem } from "@client";
 import { computed, onMounted, ref, watch } from "vue";
 import { store } from "@/shared";
+import TimePicker from "@/components/TimePicker.vue";
+import { Temporal } from "temporal-polyfill";
 
 const page = ref(0);
 const error = ref<{
@@ -17,8 +19,8 @@ const data = ref({
   copyFrom: undefined as string | undefined,
 
   name: "",
-  start: undefined as string | undefined,
-  end: undefined as string | undefined,
+  start: null as Temporal.Instant | null,
+  end: null as Temporal.Instant | null,
   image: undefined as File | undefined,
   alt: "",
   description: "",
@@ -40,7 +42,7 @@ async function submitCreateProblem() {
     return;
   }
   try {
-    const { file, copyFrom, ...payload } = data.value;
+    const { file, copyFrom, start, end, ...payload } = data.value;
     const problem = file ?? copyFrom;
     if (!problem) {
       error.value.type = "missing";
@@ -50,7 +52,9 @@ async function submitCreateProblem() {
       tournament: store.tournament.id,
       alt_text: payload.alt,
       problem: problem,
-      ...payload
+      ...payload,
+      start: start ?? undefined,
+      end: end ?? undefined,
     }});
     const location = result.data ?? "/";
     router.push(location);
@@ -149,11 +153,11 @@ watch(() => data.value.file, () => data.value.copyFrom = undefined);
             </div>
             <div class="mb-3">
               <label for="start_time" class="form-label">Starting time</label>
-              <input type="datetime-local" step="60" class="form-control" id="start_time" v-model="data.start" />
+              <TimePicker id="start_time" step="60" v-model:time="data.start" :default-time="new Temporal.PlainTime(0, 0)"/>
             </div>
             <div class="mb-3">
               <label for="end_time" class="form-label">Ending time</label>
-              <input type="datetime-local" step="60" class="form-control" id="end_time" v-model="data.end" />
+              <TimePicker id="end_time" step="60" v-model:time="data.end" :default-time="new Temporal.PlainTime(23, 59)"/>
             </div>
 
             <div class="d-flex mt-3">

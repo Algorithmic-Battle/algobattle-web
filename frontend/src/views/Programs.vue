@@ -13,7 +13,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import FileInput from "@/components/FileInput.vue";
 import Paginator from "@/components/Paginator.vue";
 import DeleteButton from "@/components/DeleteButton.vue";
-import { DateTime } from "luxon";
+import { Temporal } from "temporal-polyfill";
 
 const programs = ref<ModelDict<Program>>({});
 const sortedPrograms = computed(() => {
@@ -22,9 +22,15 @@ const sortedPrograms = computed(() => {
     const startA = problems.value[a.problem].start || "";
     const startB = problems.value[b.problem].start || "";
     return (
-      -1 * startA.localeCompare(startB) ||
+      (startA && startB
+        ? -Temporal.Instant.compare(startA, startB)
+        : startA
+          ? -1
+          : startB
+            ? 1
+            : 0) ||
       a.role.localeCompare(b.role) ||
-      -1 * a.creation_time.localeCompare(b.creation_time)
+      -Temporal.Instant.compare(a.creation_time, b.creation_time)
     );
   });
   return sorted;
@@ -39,9 +45,11 @@ const searchData = ref({
   role: null,
 });
 const activeProblems = computed(() => {
-  const now = DateTime.now();
+  const now = Temporal.Now.instant();
   const probs = Object.values(problems.value).filter(
-    (p) => (!p.start || DateTime.fromISO(p.start) <= now) && (!p.end || DateTime.fromISO(p.end) > now)
+    (p) =>
+      (!p.start || Temporal.Instant.compare(p.start, now) <= 0) &&
+      (!p.end || Temporal.Instant.compare(p.end, now) > 0)
   );
   if (probs.length == 1) {
     newProgData.value.problem = probs[0].id;
@@ -132,7 +140,7 @@ onMounted(() => {
           <td>{{ problems[program.problem].name }}</td>
           <td v-if="store.team == 'admin'">{{ teams[program.team].name }}</td>
           <td>{{ program.role }}</td>
-          <td>{{ new Date(program.creation_time).toLocaleString() }}</td>
+          <td>{{ program.creation_time.toLocaleString() }}</td>
           <td>{{ program.name }}</td>
           <td>
             <a

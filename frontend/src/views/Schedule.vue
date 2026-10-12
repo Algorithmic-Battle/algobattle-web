@@ -3,7 +3,9 @@ import { store, type ModelDict, problemURL } from "@/shared";
 import { createSchedule, deleteSchedule as deleteScheduleRequest, editSchedule, getProblems, scheduledMatches } from "@client";
 import { Modal } from "bootstrap";
 import type { ScheduledMatch, Problem, ScheduleAffects } from "@client";
-import { computed, onMounted, ref, toRaw, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { Temporal } from "temporal-polyfill";
+import TimePicker from "@/components/TimePicker.vue";
 
 const matches = ref<ModelDict<ScheduledMatch>>({});
 const problems = ref<ModelDict<Problem>>({});
@@ -19,24 +21,18 @@ const affectedMatchesLoading = ref(false);
 let affectedMatchesRequest = 0;
 const sortedMatches = computed(() => {
   const sorted = Object.values(matches.value);
-  sorted.sort((a, b) => {
-    if (a.time < b.time) {
-      return -1;
-    } else if (a.time > b.time) {
-      return 1;
-    } else {
-      return 0;
-    }
-  });
+  sorted.sort((a, b) => Temporal.Instant.compare(a.time, b.time));
   return sorted;
 });
 
 const affectedMatches = computed(() => {
-  const series = [...affectedSeriesMatches.value].sort((a, b) => a.time.localeCompare(b.time));
+  const series = [...affectedSeriesMatches.value].sort((a, b) =>
+    Temporal.Instant.compare(a.time, b.time),
+  );
   if (affects.value === "following" && editData.value.id) {
     const selectedTime = matches.value[editData.value.id]?.time;
     if (selectedTime) {
-      return series.filter((match) => match.time >= selectedTime);
+      return series.filter((match) => Temporal.Instant.compare(match.time, selectedTime) >= 0);
     }
   }
   return series;
@@ -69,10 +65,7 @@ const previewTimes = computed(() => {
   if (!editData.value.time) {
     return [];
   }
-  const firstTime = new Date(editData.value.time);
-  if (Number.isNaN(firstTime.getTime())) {
-    return [];
-  }
+  const firstTime = editData.value.time.toZonedDateTimeISO(Temporal.Now.timeZoneId());
   const repeating = !editData.value.id && repeatMatch.value;
   const count = repeating ? repeatOccurrences.value : 1;
   if (
@@ -83,23 +76,14 @@ const previewTimes = computed(() => {
     return [];
   }
   return Array.from({ length: count }, (_, index) => {
-    const scheduledTime = new Date(firstTime);
     const interval = repeating ? index * repeatInterval.value : 0;
-    switch (repeatIntervalUnit.value) {
-      case "minutes":
-        scheduledTime.setMinutes(scheduledTime.getMinutes() + interval);
-        break;
-      case "hours":
-        scheduledTime.setHours(scheduledTime.getHours() + interval);
-        break;
-      case "days":
-        scheduledTime.setDate(scheduledTime.getDate() + interval);
-        break;
-      case "weeks":
-        scheduledTime.setDate(scheduledTime.getDate() + interval * 7);
-        break;
-    }
-    return scheduledTime.toLocaleString();
+    const duration = {
+      minutes: { minutes: interval },
+      hours: { hours: interval },
+      days: { days: interval },
+      weeks: { weeks: interval },
+    }[repeatIntervalUnit.value];
+    return firstTime.add(duration).toLocaleString();
   });
 });
 
@@ -118,7 +102,7 @@ onMounted(async () => {
 
 function openModal(match: ScheduledMatch | undefined) {
   editData.value = match
-    ? { ...structuredClone(toRaw(match)), time: match.time.slice(0, 19) }
+    ? { ...match }
     : { points: 100 };
   repeatMatch.value = false;
   repeatOccurrences.value = 2;
@@ -159,7 +143,7 @@ async function sendData() {
     }
   } else {
     if (
-      editData.value.time === undefined ||
+      !editData.value.time ||
       editData.value.problem === undefined ||
       editData.value.points === undefined
     ) {
@@ -211,7 +195,7 @@ async function deleteMatch() {
       <tbody>
         <tr v-for="match in sortedMatches" :match="match" :key="match.id">
           <td>{{ match.name }}</td>
-          <td>{{ new Date(match.time).toLocaleString() }}</td>
+          <td>{{ match.time.toLocaleString() }}</td>
           <td>
             <RouterLink :to="problemURL(problems[match.problem])">{{ problems[match.problem].name }}</RouterLink>
           </td>
@@ -262,7 +246,7 @@ async function deleteMatch() {
           <label for="name" class="form-label">Name</label>
           <input id="name" class="form-control" type="text" maxlength="32" v-model="editData.name" />
           <label for="time" class="form-label">Time</label>
-          <input id="time" class="form-control" type="datetime-local" step="60" required v-model="editData.time" />
+          <TimePicker id="time" step="60" required :time="editData.time" :default-time="new Temporal.PlainTime(23, 59)" />
           <label for="problem" class="form-label">Problem</label>
           <select id="problem" class="form-select" required v-model="editData.problem">
             <option v-for="(problem, id) in problems" :value="id">{{ problem.name }}</option>
@@ -331,7 +315,7 @@ async function deleteMatch() {
                 </span>
                 <ul v-if="affectedMatches.length" class="mb-0">
                   <li v-for="match in affectedMatches" :key="match.id">
-                    {{ match.name || "Unnamed match" }} — {{ new Date(match.time).toLocaleString() }}
+                    {{ match.name || "Unnamed match" }} — {{ match.time.toLocaleString() }}
                   </li>
                 </ul>
                 <div v-else class="text-muted">No matches will be affected.</div>

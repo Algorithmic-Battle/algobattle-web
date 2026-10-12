@@ -10,7 +10,6 @@ import {
   PointElement,
   LineElement,
   Colors,
-  TimeSeriesScale,
   type ChartOptions,
   type ChartData,
   type Point,
@@ -20,16 +19,11 @@ import {
   getScores,
   type MatchEvent,
   type ExtraEvent,
-  type MatchResult,
-  type Problem,
   type ScoreData,
-  type Team,
   type Tournament,
 } from "@client";
 import { computed, onMounted, ref, watch } from "vue";
-import type { ModelDict } from "@/shared";
-import { DateTime } from "luxon";
-import "chartjs-adapter-luxon";
+import { Temporal } from "temporal-polyfill";
 import annotationPlugin from "chartjs-plugin-annotation";
 
 ChartJS.register(
@@ -42,7 +36,6 @@ ChartJS.register(
   Colors,
   LinearScale,
   CategoryScale,
-  TimeSeriesScale,
   annotationPlugin
 );
 
@@ -71,7 +64,9 @@ watch(() => props.state, getData);
 onMounted(getData);
 
 const labels = computed(() => {
-  const t = matchEvents.value.map((e) => DateTime.fromISO(e.time).toLocaleString(DateTime.DATE_MED));
+  const t = matchEvents.value.map((e) =>
+    e.time.toLocaleString(undefined, { dateStyle: "medium" }),
+  );
   t.splice(0, 0, "Start");
   return t;
 });
@@ -81,24 +76,26 @@ const positionedEvents = computed(() => {
   if (!events || events.length === 0) {
     return [];
   }
-  var last = DateTime.fromISO(events[0].time);
+  var last = events[0].time;
   var interval: number | undefined;
   var index = 0;
   return events.map((event, i) => {
     if ("problem" in event) {
-      last = DateTime.fromISO(event.time);
+      last = event.time;
       interval = undefined;
       index++;
       return { ...event, position: index };
     } else {
       if (!interval) {
-        var nextEvent = events.find((e) => e.type === "match" && e.time > event.time);
+        var nextEvent = events.find(
+          (e) => e.type === "match" && Temporal.Instant.compare(e.time, event.time) > 0,
+        );
         if (!nextEvent) {
           nextEvent = events[events.length - 1];
         }
-        interval = DateTime.fromISO(nextEvent.time).diff(last).toMillis();
+        interval = nextEvent.time.epochMilliseconds - last.epochMilliseconds;
       }
-      var fractional = DateTime.fromISO(event.time).diff(last).toMillis() / interval;
+      var fractional = (event.time.epochMilliseconds - last.epochMilliseconds) / interval;
       if (index === 0) {
         fractional = fractional * 0.7 + 0.3;
       } else if (index === matchEvents.value.length) {
@@ -198,7 +195,7 @@ const options = computed<ChartOptions<"line">>(() => {
               return "Start";
             }
             const matchType = event.type === "match" ? "Match" : "Bonus Points";
-            return `${matchType} on ${DateTime.fromISO(event.time).toLocaleString(DateTime.DATE_SHORT)}`;
+            return `${matchType} on ${event.time.toLocaleString(undefined, { dateStyle: "short" })}`;
           },
           label: function (tooltipItem) {
             return `${(tooltipItem.raw as DataObject).points.toString()} points`;

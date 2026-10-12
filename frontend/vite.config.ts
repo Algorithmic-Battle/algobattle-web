@@ -27,7 +27,12 @@ const config: UserConfig = {
                 auth: true,
                 operations: {
                     strategy: "flat"
-                }
+                },
+                transformer: true,
+            },
+            {
+                name: "@hey-api/transformers",
+                dates: "temporal",
             }
         ],
       },

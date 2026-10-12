@@ -17,6 +17,8 @@ import { onMounted, ref, type Ref } from "vue";
 import { useRoute } from "vue-router";
 import router from "@/router";
 import FileEditRow from "@/components/FileEditRow.vue";
+import TimePicker from "@/components/TimePicker.vue";
+import { Temporal } from "temporal-polyfill";
 
 interface ProblemEdit extends Omit<Problem, "file" | "image"> {
   file: DbFile | File;
@@ -34,7 +36,7 @@ const teams = ref<ModelDict<Team>>({});
 
 const route = useRoute();
 const error = ref(null as null | string);
-const now = new Date();
+const now = Temporal.Now.instant();
 
 onMounted(async () => {
   const problemsResult = await getProblems({
@@ -116,7 +118,11 @@ async function removeReport() {
   Modal.getOrCreateInstance("#reportModal").hide();
 }
 function reportEditable() {
-  return store.team != "admin" || !problem.value?.end || new Date(problem.value.end) >= now;
+  return (
+    store.team != "admin" ||
+    !problem.value?.end ||
+    Temporal.Instant.compare(problem.value.end, now) >= 0
+  );
 }
 
 let editProblem = ref<ProblemEdit>();
@@ -124,8 +130,8 @@ let confirmDeleteProblem = ref(false);
 function createProblemEdit(problem: Problem): ProblemEdit {
   return {
     ...problem,
-    start: problem?.start?.slice(0, 19),
-    end: problem?.end?.slice(0, 19),
+    start: problem.start,
+    end: problem.end,
     alt: problem.image?.alt_text || "",
   };
 }
@@ -151,8 +157,8 @@ async function submitEdit() {
     bodyEditProblem: {
       name: prob.name,
       tournament: prob.tournament.id,
-      start: prob.start || "remove",
-      end: prob.end || "remove",
+      start: prob.start ?? "remove",
+      end: prob.end ?? "remove",
       description: prob.description,
       alt_text: prob.alt,
       colour: prob.colour,
@@ -244,10 +250,10 @@ async function deleteSelectedProblem() {
               {{ problem.description }}
             </li>
             <li v-if="problem.start" class="list-group-item bg-body-tertiary">
-              Start: {{ new Date(problem.start).toLocaleString() }}
+              Start: {{ problem.start.toLocaleString() }}
             </li>
             <li v-if="problem.end" class="list-group-item bg-body-tertiary">
-              End: {{ new Date(problem.end).toLocaleString() }}
+              End: {{ problem.end.toLocaleString() }}
             </li>
             <li class="list-group-item bg-body-tertiary">
               <a
@@ -403,13 +409,12 @@ async function deleteSelectedProblem() {
             </div>
             <div class="mb-3">
               <label for="start_time" class="form-label">Starting time</label>
-              <input
-                type="datetime-local"
-                step="60"
+              <TimePicker
                 name="start"
-                class="form-control"
                 id="start_time"
-                v-model="editProblem.start"
+                step="60"
+                v-model:time="editProblem.start"
+                :default-time="new Temporal.PlainTime(0, 0)"
               />
             </div>
           </div>
@@ -431,13 +436,12 @@ async function deleteSelectedProblem() {
             </div>
             <div class="mb-3">
               <label for="end_time" class="form-label">Ending time</label>
-              <input
-                type="datetime-local"
-                step="60"
+              <TimePicker
                 name="end"
-                class="form-control"
                 id="end_time"
-                v-model="editProblem.end"
+                step="60"
+                v-model:time="editProblem.end"
+                :default-time="new Temporal.PlainTime(23, 59)"
               />
             </div>
           </div>

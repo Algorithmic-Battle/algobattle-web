@@ -12,9 +12,9 @@ from pydantic import ByteSize, Field, PlainSerializer, computed_field, field_val
 from algobattle_web.util import BaseSchema, EmailConfig, EnvConfig, MatchStatus, ObjID
 
 
-def naive_localize(date: datetime) -> str:
+def naive_localize(date: datetime) -> datetime:
     """Naively localizes a datetime."""
-    return date.astimezone().isoformat()
+    return date.astimezone()
 
 
 LocalDatetime = Annotated[datetime, PlainSerializer(naive_localize)]

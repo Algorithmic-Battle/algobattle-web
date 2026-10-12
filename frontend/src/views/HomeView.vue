@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { store, formatDateTime } from "@/shared";
+import { store } from "@/shared";
 import { computed, onMounted, ref } from "vue";
 import {
   type Problem,
@@ -14,7 +14,7 @@ import {
 } from "@client";
 import ProblemCard from "@/components/ProblemCard.vue";
 import ResultChart from "@/components/ResultChart.vue";
-import { DateTime } from "luxon";
+import { Temporal } from "temporal-polyfill";
 
 const home_page = ref<string | null>();
 const curr_prob = ref<Problem | undefined>(undefined);
@@ -30,15 +30,16 @@ onMounted(async () => {
   }
   const problemsResult = await getProblems({ tournament: store.tournament?.id });
   const problems = (problemsResult.data ?? {}) as Record<string, Problem>;
+  const now = Temporal.Now.instant();
   curr_prob.value = Object.values(problems)
-    .filter((p: Problem) => !p.end || DateTime.now() <= DateTime.fromISO(p.end))
+    .filter((p: Problem) => !p.end || Temporal.Instant.compare(now, p.end) <= 0)
     .sort((a: Problem, b: Problem) => {
       if (!a.end) {
         return 1;
       } else if (!b.end) {
         return -1;
       } else {
-        return a.end.localeCompare(b.end);
+        return Temporal.Instant.compare(a.end, b.end);
       }
     })[0];
   if (!curr_prob.value) {
@@ -47,8 +48,11 @@ onMounted(async () => {
   const schedulesResult = await scheduledMatches();
   const schedules = (schedulesResult.data ?? { matches: {} }) as { matches?: Record<string, ScheduledMatch> };
   next_match.value = Object.values(schedules.matches ?? {})
-    .filter((m: ScheduledMatch) => m.problem == curr_prob.value?.id && DateTime.now() <= DateTime.fromISO(m.time))
-    .sort((a: ScheduledMatch, b: ScheduledMatch) => a.time.localeCompare(b.time))[0];
+    .filter(
+      (m: ScheduledMatch) =>
+        m.problem == curr_prob.value?.id && Temporal.Instant.compare(now, m.time) <= 0,
+    )
+    .sort((a: ScheduledMatch, b: ScheduledMatch) => Temporal.Instant.compare(a.time, b.time))[0];
   if (store.team instanceof Object) {
     const programsResult = await searchProgram({ team: store.team.id, problem: curr_prob.value.id });
     const programsData = (programsResult.data ?? { programs: {} }) as { programs?: Record<string, Program>; total?: number };
@@ -64,15 +68,31 @@ onMounted(async () => {
         solvers = Object.values(solverResult.data?.programs ?? {});
       }
     }
-    generator.value = generators.sort((a: Program, b: Program) => b.creation_time.localeCompare(a.creation_time))[0];
-    solver.value = solvers.sort((a: Program, b: Program) => b.creation_time.localeCompare(a.creation_time))[0];
+    generator.value = generators.sort((a: Program, b: Program) =>
+      Temporal.Instant.compare(b.creation_time, a.creation_time),
+    )[0];
+    solver.value = solvers.sort((a: Program, b: Program) =>
+      Temporal.Instant.compare(b.creation_time, a.creation_time),
+    )[0];
     const reportResult = await getReports({ problem: curr_prob.value.id, team: store.team.id });
     const reportData = (reportResult.data ?? { reports: {} }) as { reports?: Record<string, Report> };
     report.value = Object.values(reportData.reports ?? {})[0] as Report | undefined;
   }
 });
-function until(timestamp: string): string {
-  return DateTime.fromISO(timestamp).diff(DateTime.now().startOf("minute"), ["minutes"]).rescale().toHuman();
+function until(timestamp: Temporal.Instant): string {
+  const now = Temporal.Now.instant().round({ smallestUnit: "minute", roundingMode: "floor" });
+  const duration = now.until(timestamp).round({ smallestUnit: "minute", roundingMode: "trunc" });
+  const totalMinutes = Math.trunc(duration.total({ unit: "minutes" }));
+  const absoluteMinutes = Math.abs(totalMinutes);
+  const parts = [
+    [Math.floor(absoluteMinutes / 1_440), "day"],
+    [Math.floor((absoluteMinutes % 1_440) / 60), "hour"],
+    [absoluteMinutes % 60, "minute"],
+  ]
+    .filter(([value]) => value !== 0)
+    .slice(0, 2)
+    .map(([value, unit]) => `${value} ${unit}${value === 1 ? "" : "s"}`);
+  return `${totalMinutes < 0 ? "-" : ""}${parts.join(", ") || "0 minutes"}`;
 }
 </script>
 
@@ -103,7 +123,7 @@ function until(timestamp: string): string {
                 <td>
                   Using generator
                   {{
-                    generator.name ? generator.name : "uploaded at " + formatDateTime(generator.creation_time)
+                    generator.name ? generator.name : "uploaded at " + generator.creation_time.toLocaleString()
                   }}
                 </td>
               </tr>
@@ -113,7 +133,7 @@ function until(timestamp: string): string {
               <tr v-if="solver">
                 <td>
                   Using solver
-                  {{ solver.name ? solver.name : "uploaded at " + formatDateTime(solver.creation_time) }}
+                  {{ solver.name ? solver.name : "uploaded at " + solver.creation_time.toLocaleString() }}
                 </td>
               </tr>
               <tr v-else-if="store.team instanceof Object">

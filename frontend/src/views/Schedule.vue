@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { store, type ModelDict, problemURL } from "@/shared";
-import { createSchedule, deleteSchedule as deleteScheduleRequest, editSchedule, getProblems, scheduledMatches } from "@client";
+import { createSchedule, deleteSchedule as deleteScheduleRequest, editSchedule, getProblems, login, scheduledMatches } from "@client";
 import { Modal } from "bootstrap";
 import type { ScheduledMatch, Problem, ScheduleAffects } from "@client";
 import { computed, onMounted, ref, watch } from "vue";
@@ -95,7 +95,7 @@ onMounted(async () => {
   matches.value = (data.matches ?? {}) as ModelDict<ScheduledMatch>;
   modal = Modal.getOrCreateInstance("#editModal");
   if (store.team == "admin") {
-    const problemResult = await getProblems({});
+    const problemResult = await getProblems({tournament: store.tournament?.id});
     problems.value = (problemResult.data ?? {}) as ModelDict<Problem>;
   }
 });
@@ -127,6 +127,7 @@ function intervalAsDuration() {
 }
 
 async function sendData() {
+  console.log("ads")
   if (editData.value.id) {
     const result = await editSchedule({
       id: editData.value.id,
@@ -147,13 +148,14 @@ async function sendData() {
       editData.value.problem === undefined ||
       editData.value.points === undefined
     ) {
+      console.log("???")
       return;
     }
     const result = await createSchedule({
-      time: editData.value.time,
-      problem: editData.value.problem,
-      points: editData.value.points,
       bodyCreateSchedule: {
+        problem: editData.value.problem,
+        time: editData.value.time,
+        points: editData.value.points,
         name: editData.value.name ?? "",
         repeats: repeatMatch.value
           ? {
@@ -246,7 +248,7 @@ async function deleteMatch() {
           <label for="name" class="form-label">Name</label>
           <input id="name" class="form-control" type="text" maxlength="32" v-model="editData.name" />
           <label for="time" class="form-label">Time</label>
-          <TimePicker id="time" step="60" required :time="editData.time" :default-time="new Temporal.PlainTime(23, 59)" />
+          <TimePicker id="time" step="60" required v-model:time="editData.time" :default-time="new Temporal.PlainTime(23, 59)" />
           <label for="problem" class="form-label">Problem</label>
           <select id="problem" class="form-select" required v-model="editData.problem">
             <option v-for="(problem, id) in problems" :value="id">{{ problem.name }}</option>
@@ -289,7 +291,7 @@ async function deleteMatch() {
                 </select>
               </div>
             </template>
-            <div v-if="previewTimes.length" class="mt-3">
+            <div v-if="previewTimes.length > 1" class="mt-3">
               <span class="form-label">Matches will be scheduled at:</span>
               <ol class="mb-0">
                 <li v-for="(time, index) in previewTimes" :key="index">{{ time }}</li>

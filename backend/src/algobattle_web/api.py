@@ -26,7 +26,7 @@ from fastapi.datastructures import Default, DefaultPlaceholder
 from fastapi.dependencies.utils import get_typed_return_annotation
 from fastapi.responses import FileResponse
 from fastapi.routing import APIRoute
-from pydantic import ByteSize, Field, TypeAdapter, WithJsonSchema
+from pydantic import BeforeValidator, ByteSize, Field, TypeAdapter, WithJsonSchema
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -83,6 +83,11 @@ class EditAction(Enum):
     add = "add"
     remove = "remove"
 
+
+def strip_quotes(data: str) -> str:
+    return data.strip('"')
+
+DateTime = Annotated[datetime, BeforeValidator(strip_quotes)]
 
 # we can't use an actual type alias here to not break hey-api generation
 ID = Annotated[UUID, WithJsonSchema({"type": "string"}, "serialization")]
@@ -342,7 +347,7 @@ def send_login_email(user_id: ID, target_url: str) -> None:
 
 class TokenData(BaseSchema):
     token: str
-    expires: datetime
+    expires: DateTime
 
 
 @router.get("/user/token/{login_token}", tags=["user"])
@@ -727,8 +732,8 @@ def create_problem(
     problem: UploadFile | ID,
     name: Annotated[str, Form()],
     tournament: Annotated[ID, Form()],
-    start: Annotated[datetime | None, Form()] = None,
-    end: Annotated[datetime | None, Form()] = None,
+    start: Annotated[DateTime | None, Form()] = None,
+    end: Annotated[DateTime | None, Form()] = None,
     image: UploadFile | None = None,
     alt_text: Annotated[str, Form()] = "",
     description: Annotated[str, Form()] = "",
@@ -779,8 +784,8 @@ def edit_problem(
     id: ID,
     name: Annotated[str | None, Form()] = None,
     tournament: Annotated[ID | None, Form()] = None,
-    start: Annotated[datetime | Remove | None, Form()] = None,
-    end: Annotated[datetime | Remove | None, Form()] = None,
+    start: Annotated[DateTime | Remove | None, Form()] = None,
+    end: Annotated[DateTime | Remove | None, Form()] = None,
     description: Annotated[str | None, Form()] = None,
     alt_text: Annotated[str | None, Form()] = None,
     colour: Annotated[str | None, Form()] = None,
@@ -1018,9 +1023,9 @@ def create_schedule(
     *,
     db: Database,
     name: Str32 = "",
-    time: datetime,
-    problem: ID,
-    points: int = 100,
+    problem: Annotated[ID, Body()],
+    time: Annotated[DateTime, Body()],
+    points: Annotated[int, Body()] = 100,
     repeats: RepeatData | None = None,
 ) -> list[ScheduledMatch]:
     problem_ = unwrap(db.get(Problem, problem))
@@ -1047,7 +1052,7 @@ def edit_schedule(
     db: Database,
     id: ID,
     name: Annotated[str | None, Body()] = None,
-    time: Annotated[datetime | None, Body()] = None,
+    time: Annotated[DateTime | None, Body()] = None,
     problem: Annotated[ID | None, Body()] = None,
     points: Annotated[int | None, Body()] = None,
     affects: Annotated[ScheduleAffects, Body()] = "current",
@@ -1120,7 +1125,7 @@ def add_result(
     *,
     db: Database,
     status: Annotated[MatchStatus, Body()],
-    time: Annotated[datetime, Body()],
+    time: Annotated[DateTime, Body()],
     problem: Annotated[ID, Body()],
     teams: Annotated[list[ResultParticipantEdit], Body()],
 ) -> MatchResult:
@@ -1146,7 +1151,7 @@ def add_result(
 def update_result(
     db: Database,
     id: ID,
-    time: Annotated[datetime, Body()],
+    time: Annotated[DateTime, Body()],
     problem: Annotated[ID, Body()],
     status: Annotated[MatchStatus, Body()],
     teams: Annotated[list[ResultParticipantEdit], Body()],
@@ -1207,7 +1212,7 @@ def get_extra_points(
 @admin.post("/extrapoints", tags=["extrapoints"])
 def create_extra_points(
     db: Database,
-    time: Annotated[datetime, Body()],
+    time: Annotated[DateTime, Body()],
     tag: Str32,
     team: Annotated[ID, Body()],
     points: Annotated[float, Body()],
@@ -1224,7 +1229,7 @@ def create_extra_points(
 def edit_extra_points(
     db: Database,
     id: ID,
-    time: Annotated[datetime | None, Body()] = None,
+    time: Annotated[DateTime | None, Body()] = None,
     tag: Annotated[Str32 | None, Body()] = None,
     team: Annotated[ID | None, Body()] = None,
     points: Annotated[float | None, Body()] = None,

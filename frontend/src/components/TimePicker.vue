@@ -42,7 +42,7 @@ const combinedValue = computed(() =>
 watch(
   () => props.time,
   (value) => {
-    const localTime = value?.toZonedDateTimeISO(Temporal.Now.timeZoneId());
+    const localTime = value?.toZonedDateTimeISO("UTC");
     dateValue.value = localTime?.toPlainDate().toString() ?? "";
     timeValue.value = localTime?.toPlainTime().toString() ?? "";
   },
@@ -64,7 +64,7 @@ function updateTime() {
   const dateTime = Temporal.PlainDate.from(dateValue.value).toPlainDateTime(
     Temporal.PlainTime.from(timeValue.value),
   );
-  emit("update:time", dateTime.toZonedDateTime(Temporal.Now.timeZoneId()).toInstant());
+  emit("update:time", dateTime.toZonedDateTime("UTC").toInstant());
 }
 
 function updateDate(event: Event) {

@@ -414,7 +414,7 @@ async function deleteSelectedProblem() {
                 id="start_time"
                 step="60"
                 v-model:time="editProblem.start"
-                :default-time="new Temporal.PlainTime(0, 0)"
+                :default-time="new Temporal.PlainTime(0, 1)"
               />
             </div>
           </div>

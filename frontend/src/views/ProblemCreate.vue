@@ -153,7 +153,7 @@ watch(() => data.value.file, () => data.value.copyFrom = undefined);
             </div>
             <div class="mb-3">
               <label for="start_time" class="form-label">Starting time</label>
-              <TimePicker id="start_time" step="60" v-model:time="data.start" :default-time="new Temporal.PlainTime(0, 0)"/>
+              <TimePicker id="start_time" step="60" v-model:time="data.start" :default-time="new Temporal.PlainTime(0, 1)"/>
             </div>
             <div class="mb-3">
               <label for="end_time" class="form-label">Ending time</label>

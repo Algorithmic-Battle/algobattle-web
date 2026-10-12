@@ -32,6 +32,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      dev-backend:
+        condition: service_started
 
   dev-frontend:
     build:

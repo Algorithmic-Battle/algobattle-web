@@ -14,6 +14,7 @@ import {
   type MatchStatus,
   type Role,
   updateResult,
+  addResultLogs,
 } from "@client";
 import { Modal } from "bootstrap";
 import type {
@@ -110,7 +111,7 @@ interface EditData {
   time?: string;
   problem?: string;
   logs?: DbFile | null;
-  participants: Partial<ResultParticipant>[];
+  participants: ResultParticipant[];
   confirmDelete: boolean;
   newLogs?: File;
 }
@@ -139,31 +140,40 @@ async function sendData() {
     res = await updateResult({
       id: editData.value.id,
       bodyUpdateResult: {
-        problem: editData.value.problem!,
         status: editData.value.status!,
+        problem: editData.value.problem!,
         time: editData.value.time!,
-        teams: editData.value.participants.filter((p) => !!p.team_id).map((p) => p.team_id as string) as any,
-        generators: editData.value.participants.filter((p) => !!p.generator?.id).map((p) => p.generator!.id) as any,
-        solvers: editData.value.participants.filter((p) => !!p.solver?.id).map((p) => p.solver!.id) as any,
-        points: editData.value.participants.map((p) => p.points ?? 0) as any,
-        logs: editData.value.newLogs
+        teams: editData.value.participants?.map((p: ResultParticipant) => ({
+          team_id: p.team_id,
+          generator: p.generator?.id ?? null,
+          solver: p.solver?.id ?? null,
+          points: p.points,
+        })) ?? []
       },
     });
   } else {
     res = await addResult({
-      status: editData.value.status!,
-      time: editData.value.time!,
-      problem: editData.value.problem!,
       bodyAddResult: {
-        logs: editData.value.newLogs,
-        teams: editData.value.participants.filter((p) => !!p.team_id).map((p) => p.team_id as string) as any,
-        generators: editData.value.participants.filter((p) => !!p.generator?.id).map((p) => p.generator!.id) as any,
-        solvers: editData.value.participants.filter((p) => !!p.solver?.id).map((p) => p.solver!.id) as any,
-        points: editData.value.participants.map((p) => p.points ?? 0) as any,
+        status: editData.value.status!,
+        time: editData.value.time!,
+        problem: editData.value.problem!,
+        teams: editData.value.participants?.map((p: ResultParticipant) => ({
+          team_id: p.team_id,
+          generator: p.generator?.id ?? null,
+          solver: p.solver?.id ?? null,
+          points: p.points,
+        })) ?? [],
       },
     });
   }
-  const resultData = (res.data ?? null) as MatchResult | null;
+  let resultData = res.data ?? null;
+  if (editData.value.newLogs) {
+    try {
+      resultData = (await addResultLogs({id: resultData.id, bodyAddResultLogs: {logs: editData.value.newLogs}})).data;
+    } catch {
+      ///!!! ADD ERROR HANDLING
+    }
+  }
   if (resultData) {
     resultsData.value[resultData.id] = resultData;
   }
@@ -543,7 +553,12 @@ function makeFreeform() {
                   <button
                     type="button"
                     class="btn btn-sm btn-success"
-                    @click="editData.participants.push({})"
+                    @click="editData.participants.push({
+                      team_id: Object.keys(teams)[0],
+                      generator: null,
+                      solver: null,
+                      points: 0,
+                      })"
                   >
                     <i class="bi bi-plus-square-dotted"></i>
                   </button>

@@ -1108,40 +1108,35 @@ def delete_results(*, db: Database, id: ID) -> None:
     db.commit()
 
 
+class ResultParticipantEdit(BaseSchema):
+    team_id: UUID
+    generator: UUID | None
+    solver: UUID | None
+    points: float
+
+
 @admin.post("/match/result", tags=["match"])
 def add_result(
     *,
     db: Database,
-    status: MatchStatus,
-    time: datetime,
-    problem: ID,
-    teams: Annotated[list[ID], Form()],
-    generators: Annotated[list[ID | None | Literal["undefined"]], Form()],
-    solvers: Annotated[list[ID | None | Literal["undefined"]], Form()],
-    points: Annotated[list[float], Form()],
-    logs: UploadFile | None = None,
+    status: Annotated[MatchStatus, Body()],
+    time: Annotated[datetime, Body()],
+    problem: Annotated[ID, Body()],
+    teams: Annotated[list[ResultParticipantEdit], Body()],
 ) -> MatchResult:
-    if logs is not None and logs.size and ServerSettings.get(db).upload_file_limit < logs.size:
-        raise ValueError
     problem_model = unwrap(db.get(Problem, problem))
-    file = DbFile.from_file(logs) if logs else None
-    if len(teams) != len(set(teams)):
+    if len(teams) != len({team.team_id for team in teams}):
         raise HTTPException(422, "Each team can can only appear once in each match")
-    try:
-        participants = {
-            ResultParticipant(
-                team=Team.get_unwrap(db, team),
-                generator=Program.get_unwrap(db, gen) if isinstance(gen, UUID) else None,
-                solver=Program.get_unwrap(db, sol) if isinstance(sol, UUID) else None,
-                points=p,
-            )
-            for team, gen, sol, p in zip(teams, generators, solvers, points, strict=True)
-        }
-    except ValueError:
-        raise HTTPException(422, "Length of participant field infos was not equal") from None
-    db_res = MatchResult(
-        status=status, time=time, problem=problem_model, participants=participants, logs=file
-    )
+    participants = {
+        ResultParticipant(
+            team=Team.get_unwrap(db, team.team_id),
+            generator=Program.get_unwrap(db, team.generator),
+            solver=Program.get_unwrap(db, team.solver),
+            points=team.points,
+        )
+        for team in teams
+    }
+    db_res = MatchResult(status=status, time=time, problem=problem_model, participants=participants)
     db.add(db_res)
     db.commit()
     return db_res
@@ -1151,21 +1146,35 @@ def add_result(
 def update_result(
     db: Database,
     id: ID,
-    time: Annotated[datetime, Form()],
-    problem: Annotated[ID, Form()],
-    status: Annotated[MatchStatus, Form()],
-    teams: Annotated[list[ID], Form()],
-    generators: Annotated[
-        list[ID | None | Literal["undefined"]], Form()
-    ],  # hack to make form parsing work
-    solvers: Annotated[list[ID | None | Literal["undefined"]], Form()],
-    points: Annotated[list[float], Form()],
-    logs: UploadFile | ID | None = None,
+    time: Annotated[datetime, Body()],
+    problem: Annotated[ID, Body()],
+    status: Annotated[MatchStatus, Body()],
+    teams: Annotated[list[ResultParticipantEdit], Body()],
 ) -> MatchResult:
     res = MatchResult.get_unwrap(db, id)
     res.time = time
     res.problem = Problem.get_unwrap(db, problem)
     res.status = status
+    res.participants = {
+        ResultParticipant(
+            team=Team.get_unwrap(db, team.team_id),
+            generator=Program.get_unwrap(db, team.generator),
+            solver=Program.get_unwrap(db, team.solver),
+            points=team.points,
+        )
+        for team in teams
+    }
+    db.commit()
+    return res
+
+
+@admin.patch("/match/result/{id}/logs", tags=["match"])
+def add_result_logs(
+    db: Database,
+    id: ID,
+    logs: UploadFile | ID | None,
+) -> MatchResult:
+    res = MatchResult.get_unwrap(db, id)
     if logs is None:
         res.logs = None
     elif isinstance(logs, UUID):
@@ -1174,18 +1183,6 @@ def update_result(
         raise ValueError
     else:
         res.logs = DbFile.from_file(logs)
-    try:
-        res.participants = {
-            ResultParticipant(
-                team=Team.get_unwrap(db, team),
-                generator=Program.get_unwrap(db, gen) if isinstance(gen, UUID) else None,
-                solver=Program.get_unwrap(db, sol) if isinstance(sol, UUID) else None,
-                points=p,
-            )
-            for team, gen, sol, p in zip(teams, generators, solvers, points, strict=True)
-        }
-    except ValueError:
-        raise HTTPException(422, "Length of participant field infos was not equal") from None
     db.commit()
     return res
 

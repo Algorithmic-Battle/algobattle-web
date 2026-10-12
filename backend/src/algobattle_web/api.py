@@ -35,7 +35,6 @@ from typing_extensions import TypeForm
 from algobattle_web import schemas
 from algobattle_web.dependencies import CurrUser, Database, LoggedIn, check_if_admin, get_db
 from algobattle_web.models import (
-    ID,
     ExtraPoints,
     File as DbFile,
     MatchResult,
@@ -45,6 +44,7 @@ from algobattle_web.models import (
     RawBase,
     Report,
     ResultParticipant,
+    ScheduleAffects,
     ScheduledMatch,
     ServerSettings,
     Team,
@@ -992,33 +992,53 @@ class ScheduleInfo(BaseSchema):
 
 
 @router.get("/match/schedule", tags=["match"])
-def scheduled_matches(*, db: Database, login: LoggedIn) -> ScheduleInfo:
-    matches = (
-        db
-        .scalars(
-            select(ScheduledMatch).where(
-                ScheduledMatch.problem.has(
-                    (Problem.tournament == login.tournament) & Problem.visible_sql(login.team)
-                )
-            )
+def scheduled_matches(*, db: Database, login: LoggedIn, scheduled_with: ID | None = None) -> ScheduleInfo:
+    if login.tournament is None:
+        return ScheduleInfo(matches={}, problems={})
+    conditions = [
+        ScheduledMatch.problem.has(
+            (Problem.tournament == login.tournament) & Problem.visible_sql(login.team)
         )
-        .unique()
-        .all()
-    )
+    ]
+    if scheduled_with is not None:
+        conditions.append(ScheduledMatch.repeats_id == scheduled_with)
+    matches = db.scalars(select(ScheduledMatch).where(*conditions)).unique().all()
     return ScheduleInfo(
         matches=encode(matches), problems=encode(match.problem for match in matches)
     )
 
 
+class RepeatData(BaseSchema):
+    occurrences: Annotated[int, Ge(1)]
+    interval: Annotated[timedelta, Ge(timedelta())]
+
+
 @admin.post("/match/schedule", tags=["match"])
 def create_schedule(
-    *, db: Database, name: Str32 = "", time: datetime, problem: ID, points: int = 100
-) -> ScheduledMatch:
+    *,
+    db: Database,
+    name: Str32 = "",
+    time: datetime,
+    problem: ID,
+    points: int = 100,
+    repeats: RepeatData | None = None,
+) -> list[ScheduledMatch]:
     problem_ = unwrap(db.get(Problem, problem))
-    schedule = ScheduledMatch(time=time, problem=problem_, name=name, points=points)
-    db.add(schedule)
+    schedules = []
+    repeats_id = None
+    if repeats is None:
+        repeats = RepeatData(occurrences=1, interval=timedelta())
+    else:
+        repeats_id = uuid4()
+    for i in range(repeats.occurrences):
+        schedule_time = time + i * repeats.interval
+        schedule = ScheduledMatch(
+            time=schedule_time, problem=problem_, name=name, points=points, repeats_id=repeats_id
+        )
+        db.add(schedule)
+        schedules.append(schedule)
     db.commit()
-    return schedule
+    return schedules
 
 
 @admin.patch("/match/schedule/{id}", tags=["match"])
@@ -1030,24 +1050,30 @@ def edit_schedule(
     time: Annotated[datetime | None, Body()] = None,
     problem: Annotated[ID | None, Body()] = None,
     points: Annotated[int | None, Body()] = None,
-) -> ScheduledMatch:
-    match = unwrap(db.get(ScheduledMatch, id))
-    if name is not None:
-        match.name = name
-    if problem is not None:
-        match.problem = unwrap(db.get(Problem, problem))
-    if points is not None:
-        match.points = points
-    if time is not None:
-        match.time = time
+    affects: Annotated[ScheduleAffects, Body()] = "current",
+) -> Sequence[ScheduledMatch]:
+    base_match = unwrap(db.get(ScheduledMatch, id))
+    time_delta = time - base_match.time if time is not None else None
+    matches = base_match.repeats_with(db, affects)
+
+    for match in matches:
+        if name is not None:
+            match.name = name
+        if problem is not None:
+            match.problem = unwrap(db.get(Problem, problem))
+        if points is not None:
+            match.points = points
+        if time_delta is not None:
+            match.time += time_delta
     db.commit()
-    return match
+    return matches
 
 
 @admin.delete("/match/schedule/{id}", tags=["match"])
-def delete_schedule(*, db: Database, id: ID) -> bool:
-    match = unwrap(db.get(ScheduledMatch, id))
-    db.delete(match)
+def delete_schedule(*, db: Database, id: ID, affects: ScheduleAffects = "current") -> bool:
+    base_match = unwrap(db.get(ScheduledMatch, id))
+    for match in base_match.repeats_with(db, affects):
+        db.delete(match)
     db.commit()
     return True
 

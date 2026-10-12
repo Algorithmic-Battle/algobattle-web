@@ -692,14 +692,29 @@ class Program(Base, PermissionCheck):
         return Program.user_editable & Program.problem.has(Problem._editable_sql(team))
 
 
+type ScheduleAffects = Literal["current", "following", "all"]
+
+
 class ScheduledMatch(Base):
     __tablename__ = "scheduledmatches"  # type: ignore
 
     time: Mapped[datetime]
     problem: Mapped[Problem] = relationship()
     problem_id: Mapped[ID] = mapped_column(ForeignKey("problems.id"), init=False)
-    name: Mapped[str32] = mapped_column(default="")
+    name: Mapped[Str32] = mapped_column(default="")
     points: Mapped[int] = mapped_column(default=100)
+    repeats_id: Mapped[ID | None] = mapped_column(default=None)
+
+    def repeats_with(self, db: Session, which: ScheduleAffects = "all"):
+        if which != "current" and self.repeats_id is None:
+            raise ValueError
+        if which == "current":
+            return [self]
+        else:
+            conditions = [ScheduledMatch.repeats_id == self.repeats_id]
+            if which == "following":
+                conditions.append(ScheduledMatch.time >= self.time)
+            return db.scalars(select(ScheduledMatch).where(*conditions)).all()
 
 
 class ResultParticipant(RawBase):

@@ -123,6 +123,7 @@ class ScheduledMatch(Base):
     time: LocalDatetime
     problem: ObjID
     points: float
+    repeats_id: UUID | None
 
 
 class ResultParticipant(BaseSchema):

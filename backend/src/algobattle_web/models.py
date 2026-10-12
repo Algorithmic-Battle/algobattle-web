@@ -61,12 +61,12 @@ from algobattle_web.util import (
     unwrap,
 )
 
-ID = UUID
-str32 = Annotated[str, mapped_column(String(32)), Field(max_length=32)]
-str64 = Annotated[str, mapped_column(String(64)), Field(max_length=64)]
-str128 = Annotated[str, mapped_column(String(128)), Field(max_length=128)]
-str256 = Annotated[str, mapped_column(String(256)), Field(max_length=256)]
-strText = Annotated[str, mapped_column(Text)]
+type ID = UUID
+type Str32 = Annotated[str, mapped_column(String(32)), Field(max_length=32)]
+type Str64 = Annotated[str, mapped_column(String(64)), Field(max_length=64)]
+type Str128 = Annotated[str, mapped_column(String(128)), Field(max_length=128)]
+type Str256 = Annotated[str, mapped_column(String(256)), Field(max_length=256)]
+type StrText = Annotated[str, mapped_column(Text)]
 type LoggedIn = Team | Literal["admin"] | None
 
 
@@ -217,9 +217,9 @@ class File(Base):
 
     Schema = schemas.DbFile
 
-    filename: Mapped[str128]
-    media_type: Mapped[str32]
-    alt_text: Mapped[str256]
+    filename: Mapped[Str128]
+    media_type: Mapped[Str32]
+    alt_text: Mapped[Str256]
     timestamp: Mapped[datetime]
 
     _action: Literal["move", "copy"] = "copy"
@@ -369,7 +369,7 @@ class ServerSettings(Base, kw_only=True):
     upload_file_limit: Mapped[int] = mapped_column(default=ByteSize(200_000_000))
 
     home_page_id: Mapped[UUID | None] = mapped_column(ForeignKey("files.id"), init=False)
-    home_page_compiled: Mapped[strText | None] = mapped_column(default=None)
+    home_page_compiled: Mapped[StrText | None] = mapped_column(default=None)
 
     @classmethod
     def get(cls, db: Session) -> Self:
@@ -402,8 +402,8 @@ class UserSettings(Base):
 class User(Base):
     """A user object."""
 
-    email: Mapped[str128] = mapped_column(unique=True)
-    name: Mapped[str32]
+    email: Mapped[Str128] = mapped_column(unique=True)
+    name: Mapped[Str32]
     is_admin: Mapped[bool] = mapped_column(default=False)
     settings: Mapped[UserSettings] = relationship(default=None)
 
@@ -490,7 +490,7 @@ class User(Base):
 
 
 class Tournament(Base, PermissionCheck):
-    name: Mapped[str32] = mapped_column(unique=True)
+    name: Mapped[Str32] = mapped_column(unique=True)
     time: Mapped[datetime] = mapped_column(default_factory=datetime.now, init=False)
 
     teams: Mapped[list[Team]] = relationship(back_populates="tournament", init=False)
@@ -516,7 +516,7 @@ class TeamSettings(Base):
 
 
 class Team(Base):
-    name: Mapped[str32]
+    name: Mapped[Str32]
     tournament: Mapped[Tournament] = relationship(
         back_populates="teams", uselist=False, lazy="joined"
     )
@@ -573,14 +573,14 @@ class Problem(Base, PermissionCheck):
     image_id: Mapped[ID | None] = mapped_column(ForeignKey("files.id"), init=False)
     tournament_id: Mapped[ID] = mapped_column(ForeignKey("tournaments.id"), init=False)
 
-    name: Mapped[str64]
+    name: Mapped[Str64]
     tournament: Mapped[Tournament] = relationship()
     file: Mapped[File] = relationship(
         foreign_keys=file_id, cascade="all, delete-orphan", single_parent=True, lazy="selectin"
     )
     start: Mapped[datetime | None] = mapped_column(default=None)
     end: Mapped[datetime | None] = mapped_column(default=None)
-    description: Mapped[str256] = mapped_column(default="")
+    description: Mapped[Str256] = mapped_column(default="")
     image: Mapped[File | None] = relationship(
         default=None,
         foreign_keys=image_id,
@@ -664,7 +664,7 @@ class Report(Base, PermissionCheck):
 
 
 class Program(Base, PermissionCheck):
-    name: Mapped[str32]
+    name: Mapped[Str32]
     team: Mapped[Team] = relationship(lazy="joined")
     team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"), init=False)
     role: Mapped[ProgramRole]
@@ -748,10 +748,10 @@ class ExtraPoints(Base, PermissionCheck):
     __tablename__ = "extrapoints"  # type: ignore
 
     time: Mapped[datetime]
-    tag: Mapped[str32]
+    tag: Mapped[Str32]
     team: Mapped[Team] = relationship()
     points: Mapped[float]
-    description: Mapped[strText] = mapped_column(default="")
+    description: Mapped[StrText] = mapped_column(default="")
 
     team_id: Mapped[ID] = mapped_column(ForeignKey("teams.id"), init=False)
 

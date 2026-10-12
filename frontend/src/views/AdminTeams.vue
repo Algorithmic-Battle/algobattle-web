@@ -3,7 +3,7 @@ import HoverBadgeVue from "@/components/HoverBadge.vue";
 import { Modal } from "bootstrap";
 import { allTournaments, createTeam, deleteTeam as deleteTeamRequest, editTeam, getTeams, searchUsers } from "@client";
 import type { Team, Tournament, User } from "@client";
-import { store, type ModelDict } from "@/shared";
+import { deepCopy, store, type ModelDict } from "@/shared";
 import { computed, onMounted, ref, toRaw, watch } from "vue";
 import Paginator from "@/components/Paginator.vue";
 
@@ -67,7 +67,7 @@ function emptyTeam(): Omit<Team, "tournament"> & { tournament: Tournament | null
   };
 }
 function openModal(team: Team | undefined) {
-  editData.value = team ? structuredClone(toRaw(team)) : emptyTeam();
+  editData.value = team ? deepCopy(toRaw(team)) : emptyTeam();
   confirmDelete.value = false;
   error.value = "";
   userSearchData.value = {

@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { store, type ModelDict, problemURL, formatDateTime } from "@/shared";
-import { createSchedule, deleteSchedule as deleteScheduleRequest, editSchedule, getProblems, login, scheduledMatches } from "@client";
+import { store, type ModelDict, problemURL, formatDateTime, deepCopy } from "@/shared";
+import {
+  createSchedule,
+  deleteSchedule as deleteScheduleRequest,
+  editSchedule,
+  getProblems,
+  scheduledMatches,
+} from "@client";
 import { Modal } from "bootstrap";
 import type { ScheduledMatch, Problem, ScheduleAffects } from "@client";
 import { computed, onMounted, ref, watch } from "vue";
@@ -90,20 +96,18 @@ const previewTimes = computed(() => {
 let modal: Modal;
 onMounted(async () => {
   const results = await scheduledMatches();
-  const data = results.data ?? { problems: {}, matches: {} } as any;
+  const data = results.data ?? ({ problems: {}, matches: {} } as any);
   problems.value = (data.problems ?? {}) as ModelDict<Problem>;
   matches.value = (data.matches ?? {}) as ModelDict<ScheduledMatch>;
   modal = Modal.getOrCreateInstance("#editModal");
   if (store.team == "admin") {
-    const problemResult = await getProblems({tournament: store.tournament?.id});
+    const problemResult = await getProblems({ tournament: store.tournament?.id });
     problems.value = (problemResult.data ?? {}) as ModelDict<Problem>;
   }
 });
 
 function openModal(match: ScheduledMatch | undefined) {
-  editData.value = match
-    ? { ...match }
-    : { points: 100 };
+  editData.value = match ? deepCopy(match) : { points: 100 };
   repeatMatch.value = false;
   repeatOccurrences.value = 2;
   repeatInterval.value = 1;
@@ -127,7 +131,6 @@ function intervalAsDuration() {
 }
 
 async function sendData() {
-  console.log("ads")
   if (editData.value.id) {
     const result = await editSchedule({
       id: editData.value.id,
@@ -148,7 +151,6 @@ async function sendData() {
       editData.value.problem === undefined ||
       editData.value.points === undefined
     ) {
-      console.log("???")
       return;
     }
     const result = await createSchedule({
@@ -199,7 +201,9 @@ async function deleteMatch() {
           <td>{{ match.name }}</td>
           <td>{{ formatDateTime(match.time) }}</td>
           <td>
-            <RouterLink :to="problemURL(problems[match.problem])">{{ problems[match.problem].name }}</RouterLink>
+            <RouterLink :to="problemURL(problems[match.problem])">{{
+              problems[match.problem].name
+            }}</RouterLink>
           </td>
           <td>{{ match.points }}</td>
           <td v-if="store.team == 'admin'" class="text-end">
@@ -234,7 +238,13 @@ async function deleteMatch() {
     You need to select a team before you can view the scheduled matches.
   </div>
 
-  <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+  <div
+    class="modal fade"
+    id="editModal"
+    tabindex="-1"
+    aria-labelledby="modalLabel"
+    aria-hidden="true"
+  >
     <div class="modal-dialog modal-dialog-centered">
       <form class="modal-content" @submit.prevent="sendData">
         <div class="modal-header">
@@ -242,19 +252,43 @@ async function deleteMatch() {
             <span v-if="editData.id">Edit scheduled match</span>
             <span v-else>Schedule new match</span>
           </h1>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
         </div>
         <div class="modal-body">
           <label for="name" class="form-label">Name</label>
-          <input id="name" class="form-control" type="text" maxlength="32" v-model="editData.name" />
+          <input
+            id="name"
+            class="form-control"
+            type="text"
+            maxlength="32"
+            v-model="editData.name"
+          />
           <label for="time" class="form-label">Time</label>
-          <TimePicker id="time" step="60" required v-model:time="editData.time" :default-time="new Temporal.PlainTime(23, 59)" />
+          <TimePicker
+            id="time"
+            step="60"
+            required
+            v-model:time="editData.time"
+            :default-time="new Temporal.PlainTime(23, 59)"
+          />
           <label for="problem" class="form-label">Problem</label>
           <select id="problem" class="form-select" required v-model="editData.problem">
             <option v-for="(problem, id) in problems" :value="id">{{ problem.name }}</option>
           </select>
           <label for="points" class="form-label">Points</label>
-          <input id="points" class="form-control" type="number" min="0" required v-model="editData.points" />
+          <input
+            id="points"
+            class="form-control"
+            type="number"
+            min="0"
+            required
+            v-model="editData.points"
+          />
           <template v-if="!editData.id">
             <label for="repeatMatch" class="form-label mt-3">Repeat this match?</label>
             <select id="repeatMatch" class="form-select" v-model="repeatMatch">
@@ -304,7 +338,9 @@ async function deleteMatch() {
             </label>
             <select id="affects" class="form-select" v-model="affects">
               <option value="current">Only this match</option>
-              <option v-if="editData.repeats_id" value="following">This and following matches</option>
+              <option v-if="editData.repeats_id" value="following">
+                This and following matches
+              </option>
               <option v-if="editData.repeats_id" value="all">All matches in the series</option>
             </select>
             <div v-if="affects !== 'current'" class="mt-3" aria-live="polite">
@@ -313,7 +349,9 @@ async function deleteMatch() {
               </div>
               <template v-else>
                 <span class="form-label">
-                  {{ confirmDelete ? "Matches that will be deleted:" : "Matches that will be edited:" }}
+                  {{
+                    confirmDelete ? "Matches that will be deleted:" : "Matches that will be edited:"
+                  }}
                 </span>
                 <ul v-if="affectedMatches.length" class="mb-0">
                   <li v-for="match in affectedMatches" :key="match.id">
@@ -342,7 +380,9 @@ async function deleteMatch() {
           >
             {{ confirmDelete ? "Confirm deletion" : "Delete match" }}
           </button>
-          <button type="button" class="btn btn-secondary ms-auto" data-bs-dismiss="modal">Discard</button>
+          <button type="button" class="btn btn-secondary ms-auto" data-bs-dismiss="modal">
+            Discard
+          </button>
           <button v-if="!confirmDelete" type="submit" class="btn btn-primary">
             {{ editData.id ? "Save" : "Schedule" }}
           </button>

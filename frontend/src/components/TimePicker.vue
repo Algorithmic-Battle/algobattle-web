@@ -21,98 +21,75 @@ const emit = defineEmits<{
 
 const attrs = useAttrs();
 const generatedId = useId();
-const dateValue = ref("");
-const timeValue = ref("");
-
+const inputValue = ref("");
 const inputId = computed(() => (typeof attrs.id === "string" ? attrs.id : generatedId));
-const inputName = computed(() => (typeof attrs.name === "string" ? attrs.name : undefined));
+const inputClass = computed(() => ["form-control", attrs.class]);
 const step = computed(() => {
   const value = Number(attrs.step ?? 60);
   return Number.isFinite(value) && value > 0 ? value : 60;
 });
 const forwardedAttrs = computed(() =>
   Object.fromEntries(
-    Object.entries(attrs).filter(([key]) => !["id", "name", "step", "type", "class"].includes(key)),
+    Object.entries(attrs).filter(([key]) => !["id", "class", "step", "type"].includes(key)),
   ),
-);
-const combinedValue = computed(() =>
-  dateValue.value && timeValue.value ? `${dateValue.value}T${timeValue.value}` : "",
 );
 
 watch(
   () => props.time,
   (value) => {
-    const localTime = value?.toZonedDateTimeISO("UTC");
-    dateValue.value = localTime?.toPlainDate().toString() ?? "";
-    timeValue.value = localTime?.toPlainTime().toString() ?? "";
+    inputValue.value = value
+      ?.toZonedDateTimeISO("UTC")
+      .toPlainDateTime()
+      .toString({ smallestUnit: "minute" }) ?? "";
   },
   { immediate: true },
 );
 
 function defaultPlainTime(): Temporal.PlainTime {
   return props.defaultTime === "now"
-    ? Temporal.Now.plainTimeISO().round({ smallestUnit: "minute", roundingMode: "floor" })
+    ? Temporal.Now.instant()
+        .toZonedDateTimeISO("UTC")
+        .toPlainTime()
+        .round({ smallestUnit: "minute", roundingMode: "floor" })
     : props.defaultTime;
 }
 
-function updateTime() {
-  if (!dateValue.value || !timeValue.value) {
+function updateTime(event: Event) {
+  const value = (event.target as HTMLInputElement).value;
+  inputValue.value = value;
+
+  if (!value) {
     emit("update:time", null);
     return;
   }
 
-  const dateTime = Temporal.PlainDate.from(dateValue.value).toPlainDateTime(
-    Temporal.PlainTime.from(timeValue.value),
+  let localDateTime = Temporal.PlainDateTime.from(value);
+  if (
+    !props.time &&
+    localDateTime.toPlainTime().equals(Temporal.PlainTime.from("00:00"))
+  ) {
+    localDateTime = localDateTime.withPlainTime(defaultPlainTime());
+    inputValue.value = localDateTime.toString({ smallestUnit: "minute" });
+  }
+
+  emit(
+    "update:time",
+    localDateTime.toZonedDateTime("UTC").toInstant(),
   );
-  emit("update:time", dateTime.toZonedDateTime("UTC").toInstant());
-}
-
-function updateDate(event: Event) {
-  dateValue.value = (event.target as HTMLInputElement).value;
-  if (!dateValue.value) {
-    timeValue.value = "";
-  } else if (!timeValue.value) {
-    timeValue.value = defaultPlainTime().toString();
-  }
-  updateTime();
-}
-
-function updateTimeValue(event: Event) {
-  timeValue.value = (event.target as HTMLInputElement).value;
-  if (!timeValue.value) {
-    dateValue.value = "";
-  } else if (!dateValue.value) {
-    dateValue.value = Temporal.Now.plainDateISO().toString();
-  }
-  updateTime();
 }
 </script>
 
 <template>
-  <div class="d-flex gap-2">
-    <div class="flex-fill">
-      <label class="visually-hidden" :for="inputId">Date</label>
-      <input
-        v-bind="forwardedAttrs"
-        :id="inputId"
-        :class="['form-control', attrs.class]"
-        type="date"
-        :value="dateValue"
-        @input="updateDate"
-      />
-    </div>
-    <div class="flex-fill">
-      <label class="visually-hidden" :for="`${inputId}-time`">Time</label>
-      <input
-        v-bind="forwardedAttrs"
-        :id="inputId ? `${inputId}-time` : undefined"
-        :class="['form-control', attrs.class]"
-        type="time"
-        :step="step"
-        :value="timeValue"
-        @input="updateTimeValue"
-      />
-    </div>
-    <input v-if="inputName" type="hidden" :name="inputName" :value="combinedValue" />
+  <div>
+    <label class="visually-hidden" :for="inputId">Date and time</label>
+    <input
+      v-bind="forwardedAttrs"
+      :id="inputId"
+      :class="inputClass"
+      type="datetime-local"
+      :step="step"
+      :value="inputValue"
+      @input="updateTime"
+    />
   </div>
 </template>

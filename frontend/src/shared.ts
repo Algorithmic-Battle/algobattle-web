@@ -23,6 +23,11 @@ export function formatDateTime(time: Temporal.Instant | Temporal.ZonedDateTime):
     return time.toLocaleString("de-DE", {dateStyle: "medium", timeStyle: "short"})
 }
 
+export function deepCopy<T>(obj: T): T {
+    return JSON.parse(JSON.stringify(obj))
+}
+
+
 export function problemURL(problem: Problem): string {
   const tournamentStr = encodeURIComponent(problem.tournament.name);
   const name = encodeURIComponent(problem.name);

@@ -118,8 +118,8 @@ const editData = ref<EditData>({
 function openEdit(match: MatchResult | undefined) {
   editData.value = match
     ? {
-        ...structuredClone(toRaw(match)),
-        time: match.time,
+        ...toRaw(match),
+        participants:  [...match.participants],
         confirmDelete: false,
       }
     : {
@@ -133,6 +133,7 @@ function openEdit(match: MatchResult | undefined) {
 
 async function sendData() {
   var res;
+  console.log(editData.value.time?.toLocaleString());
   if (editData.value.id) {
     res = await updateResult({
       id: editData.value.id,
@@ -347,7 +348,7 @@ function makeFreeform() {
         </thead>
         <tbody>
           <tr v-for="result in sortedResults" :key="result.id">
-            <td>{{ result.time }}</td>
+            <td>{{ formatDateTime(result.time) }}</td>
             <td>
               <RouterLink v-if="problems[result.problem]" :to="problemURL(problems[result.problem])">{{ problems[result.problem].name }}</RouterLink>
             </td>

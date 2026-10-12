@@ -7,7 +7,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from secrets import token_bytes
 from shutil import copyfile, copyfileobj, move
-from typing import IO, Annotated, Any, BinaryIO, ClassVar, Literal, Self, cast, overload
+from typing import (
+    IO,
+    Annotated,
+    Any,
+    BinaryIO,
+    ClassVar,
+    Concatenate,
+    Literal,
+    Self,
+    cast,
+    overload,
+)
 from uuid import UUID, uuid4
 from zipfile import ZipFile
 
@@ -32,6 +43,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.event import listens_for
+from sqlalchemy.ext.hybrid import hybrid_method
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -70,24 +82,31 @@ type StrText = Annotated[str, mapped_column(Text)]
 type LoggedIn = Team | Literal["admin"] | None
 
 
+def replace_constants[S, **P, R](method: Callable[Concatenate[S, P], R]) -> Callable[Concatenate[S, P], R]:
+    def inner(s: S, *args: P.args, **kwargs: P.kwargs) -> R:
+        res = method(s, *args, **kwargs)
+        if isinstance(res, bool) and isinstance(s, type):
+            return cast(R, sql_true() if res else sql_false())
+        return res
+
+    return inner
+
+
 # cant make it an ABC because of metaclass issues
 class PermissionCheck:
+
+    @hybrid_method
     @abstractmethod
     def _visible(self, team: Team) -> bool:
         raise NotImplementedError
 
-    @classmethod
-    @abstractmethod
-    def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
-        raise NotImplementedError
-
+    @hybrid_method
     def _editable(self, team: Team) -> bool:
-        return self._visible(team)
+        return True
 
-    @classmethod
-    def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
-        return cls._visible_sql(team)
 
+    @hybrid_method
+    @replace_constants
     def visible(self, team: LoggedIn) -> bool:
         match team:
             case "admin":
@@ -97,20 +116,12 @@ class PermissionCheck:
             case None:
                 return False
 
-    @classmethod
-    def visible_sql(cls, team: LoggedIn) -> ColumnElement[bool]:
-        match team:
-            case "admin":
-                return sql_true()
-            case Team():
-                return cls._visible_sql(team)
-            case None:
-                return sql_false()
-
     def assert_visible(self, team: LoggedIn) -> None:
         if not self.visible(team):
             raise PermissionExcpetion
 
+    @hybrid_method
+    @replace_constants
     def editable(self, team: LoggedIn) -> bool:
         match team:
             case "admin":
@@ -119,16 +130,6 @@ class PermissionCheck:
                 return self._visible(team) and self._editable(team)
             case None:
                 return False
-
-    @classmethod
-    def editable_sql(cls, team: LoggedIn) -> ColumnElement[bool]:
-        match team:
-            case "admin":
-                return sql_true()
-            case Team():
-                return cls._visible_sql(team) & cls._editable_sql(team)
-            case None:
-                return sql_false()
 
     def assert_editable(self, team: LoggedIn) -> None:
         if not self.editable(team):
@@ -503,12 +504,9 @@ class Tournament(Base, PermissionCheck):
         else:
             return db.scalars(select(cls).filter(cls.name == identifier)).first()
 
+    @hybrid_method
     def _visible(self, team: Team) -> bool:
-        return team.tournament_id == self.id
-
-    @classmethod
-    def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
-        return Tournament.id == team.tournament_id
+        return self.id == team.tournament_id
 
 
 class TeamSettings(Base):
@@ -593,20 +591,25 @@ class Problem(Base, PermissionCheck):
 
     __table_args__ = (UniqueConstraint("name", "tournament_id"),)
 
+    @hybrid_method
     def _visible(self, team: Team) -> bool:
-        return team.tournament == self.tournament and (
+        return self.tournament == team.tournament and (
             self.start is None or self.start <= datetime.now()
         )
 
+    @_visible.inplace.expression
     @classmethod
     def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
         return (Problem.tournament_id == team.tournament_id) & (
             Problem.start.is_(None) | (Problem.start <= datetime.now())
         )
 
+    @hybrid_method
     def _editable(self, team: Team) -> bool:
         return self.end is None or self.end >= datetime.now()
 
+
+    @_editable.inplace.expression
     @classmethod
     def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
         return Problem.end.is_(None) | Problem.end >= datetime.now()
@@ -648,16 +651,20 @@ class Report(Base, PermissionCheck):
 
     __table_args__ = (UniqueConstraint("team_id", "problem_id"),)
 
+    @hybrid_method
     def _visible(self, team: Team) -> bool:
         return self.team == team and self.problem.visible(team)
 
+    @_visible.inplace.expression
     @classmethod
     def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
-        return (Report.team_id == team.id) & Report.problem.has(Problem.visible_sql(team))
+        return (Report.team_id == team.id) & Report.problem.has(Problem.visible(team))
 
+    @hybrid_method
     def _editable(self, team: Team) -> bool:
         return self.problem._editable(team)
 
+    @_editable.inplace.expression
     @classmethod
     def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
         return Report.problem.has(Problem._editable_sql(team))
@@ -677,16 +684,15 @@ class Program(Base, PermissionCheck):
     creation_time: Mapped[datetime] = mapped_column(default_factory=datetime.now)
     user_editable: Mapped[bool] = mapped_column(default=True)
 
+    @hybrid_method
     def _visible(self, team: Team) -> bool:
-        return self.team == team
+        return self.team_id == team.id
 
-    @classmethod
-    def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
-        return Program.team_id == team.id
-
+    @hybrid_method
     def _editable(self, team: Team) -> bool:
         return self.user_editable and self.problem._editable(team)
 
+    @_editable.inplace.expression
     @classmethod
     def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
         return Program.user_editable & Program.problem.has(Problem._editable_sql(team))
@@ -751,9 +757,11 @@ class MatchResult(Base, PermissionCheck):
         lazy="selectin",
     )
 
+    @hybrid_method
     def _visible(self, team: Team) -> bool:
         return any(team == p.team for p in self.participants)
 
+    @_visible.inplace.expression
     @classmethod
     def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
         return MatchResult.participants.any(ResultParticipant.team_id == team.id)
@@ -770,16 +778,11 @@ class ExtraPoints(Base, PermissionCheck):
 
     team_id: Mapped[ID] = mapped_column(ForeignKey("teams.id"), init=False)
 
+    @hybrid_method
     def _visible(self, team: Team) -> bool:
-        return team.tournament == self.team.tournament
+        return self.team_id == team.id
 
-    @classmethod
-    def _visible_sql(cls, team: Team) -> ColumnElement[bool]:
-        return ExtraPoints.team.has(Team.tournament_id == team.tournament_id)
-
+    @hybrid_method
+    @replace_constants
     def _editable(self, team: Team) -> bool:
         return False
-
-    @classmethod
-    def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
-        return sql_false()

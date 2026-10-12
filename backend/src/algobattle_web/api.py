@@ -479,7 +479,7 @@ def all_tournaments(
     if id:
         filters.append(Tournament.id == id)
     tournaments = db.scalars(
-        select(Tournament).where(*filters, Tournament.visible_sql(login.team))
+        select(Tournament).where(*filters, Tournament.visible(login.team))
     ).all()
     return encode(tournaments)
 
@@ -566,7 +566,7 @@ def get_scores(db: Database, login: LoggedIn, id: ID) -> ScoreData:
         db
         .scalars(
             select(Problem).where(
-                Problem.tournament_id == tournament.id, Problem.visible_sql(login.team)
+                Problem.tournament_id == tournament.id, Problem.visible(login.team)
             )
         )
         .unique()
@@ -705,7 +705,7 @@ def get_problems(
     if name:
         filters.append(Problem.name == name)
     problems = (
-        db.scalars(select(Problem).where(*filters, Problem.visible_sql(login.team))).unique().all()
+        db.scalars(select(Problem).where(*filters, Problem.visible(login.team))).unique().all()
     )
     return encode(problems)
 
@@ -713,7 +713,7 @@ def get_problems(
 @router.get("/problem/pagedata", tags=["problem"])
 def get_problem_page_data(*, db: Database, login: LoggedIn, id: ID) -> ProblemPageData | None:
     prob = db.scalars(
-        select(Problem).where(Problem.id == id, Problem.visible_sql(login.team))
+        select(Problem).where(Problem.id == id, Problem.visible(login.team))
     ).first()
     if prob is None:
         raise ValueError
@@ -885,7 +885,7 @@ def get_reports(
     team: ID | None = None,
     offset: int = 0,
 ) -> Reports:
-    filters = [Report.visible_sql(login.team)]
+    filters = [Report.visible(login.team)]
     if problem:
         filters.append(Report.problem_id == problem)
     if team:
@@ -924,7 +924,7 @@ def search_program(
     tournament: ID | None = None,
     offset: int = 0,
 ) -> ProgramResults:
-    filters = [Program.visible_sql(login.team)]
+    filters = [Program.visible(login.team)]
     if name is not None:
         filters.append(Program.name.contains(name, autoescape=True))
     if team is not None:
@@ -997,7 +997,7 @@ def scheduled_matches(*, db: Database, login: LoggedIn, scheduled_with: ID | Non
         return ScheduleInfo(matches={}, problems={})
     conditions = [
         ScheduledMatch.problem.has(
-            (Problem.tournament == login.tournament) & Problem.visible_sql(login.team)
+            (Problem.tournament == login.tournament) & Problem.visible(login.team)
         )
     ]
     if scheduled_with is not None:
@@ -1088,7 +1088,7 @@ class MatchResultData(BaseSchema):
 def results(
     *, db: Database, login: LoggedIn, problem: ID | None = None, tournament: ID | None = None
 ) -> MatchResultData:
-    filters = [MatchResult.problem.has(Problem.visible_sql(login.team))]
+    filters = [MatchResult.problem.has(Problem.visible(login.team))]
     if problem is not None:
         filters.append(MatchResult.problem_id == problem)
     if tournament is not None:
@@ -1199,7 +1199,7 @@ def update_result(
 def get_extra_points(
     db: Database, login: LoggedIn, tournament: ID | None = None, tag: str | None = None
 ) -> Sequence[ExtraPoints]:
-    filters = [ExtraPoints.visible_sql(login.team)]
+    filters = [ExtraPoints.visible(login.team)]
     if tournament is not None:
         filters.append(ExtraPoints.team.has(Team.tournament_id == tournament))
     if tag is not None:

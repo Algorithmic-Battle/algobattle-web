@@ -1,18 +1,27 @@
 "Module specifying the json api actions."
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from enum import Enum, StrEnum
 from os import environ
 from smtplib import SMTP
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Self, cast, get_args, get_origin
 from urllib.parse import quote
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from algobattle.util import Role
-from annotated_types import Interval
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, Form, HTTPException, UploadFile
+from annotated_types import Ge, Interval
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    Form,
+    HTTPException,
+    Response,
+    UploadFile,
+)
 from fastapi.datastructures import Default, DefaultPlaceholder
 from fastapi.dependencies.utils import get_typed_return_annotation
 from fastapi.responses import FileResponse
@@ -21,6 +30,7 @@ from pydantic import ByteSize, Field, TypeAdapter, WithJsonSchema
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from typing_extensions import TypeForm
 
 from algobattle_web import schemas
 from algobattle_web.dependencies import CurrUser, Database, LoggedIn, check_if_admin, get_db
@@ -32,6 +42,7 @@ from algobattle_web.models import (
     Problem,
     ProblemPageData,
     Program,
+    RawBase,
     Report,
     ResultParticipant,
     ScheduledMatch,
@@ -73,12 +84,33 @@ class EditAction(Enum):
     remove = "remove"
 
 
+# we can't use an actual type alias here to not break hey-api generation
+ID = Annotated[UUID, WithJsonSchema({"type": "string"}, "serialization")]
 type Str32 = Annotated[str, Body(max_length=32)]
 type Str64 = Annotated[str, Body(max_length=64)]
 type Str128 = Annotated[str, Body(max_length=128)]
 type Str256 = Annotated[str, Body(max_length=256)]
 type DBSession = Annotated[Session, Depends(get_db)]
 SQL_LIMIT = 50
+
+
+def replace_models(tp: TypeForm) -> TypeForm:
+    if isinstance(tp, type) and issubclass(tp, RawBase):
+        return tp.Schema
+
+    origin = get_origin(tp)
+    if origin is None:
+        return tp
+
+    args = get_args(tp)
+    if origin is Annotated:
+        return origin[replace_models(args[0]), *args[1:]]
+
+    replaced_args = tuple(replace_models(arg) for arg in args)
+    if origin in (Sequence, Iterable):
+        return cast(TypeForm, list.__class_getitem__(replaced_args))
+
+    return origin[replaced_args]
 
 
 class SchemaRoute(APIRoute):
@@ -95,8 +127,8 @@ class SchemaRoute(APIRoute):
     ) -> None:
         if isinstance(response_model, DefaultPlaceholder):
             return_annotation = get_typed_return_annotation(endpoint)
-            if hasattr(return_annotation, "Schema"):
-                response_model = return_annotation.Schema
+            if not (isinstance(return_annotation, type) and issubclass(return_annotation, Response)):
+                response_model = replace_models(return_annotation)
         if response_model_exclude_unset is None:
             response_model_exclude_unset = True
         super().__init__(
@@ -144,7 +176,7 @@ class UserSearch(BaseSchema):
 def search_users(
     *,
     db: Database,
-    ids: Sequence[UUID] = (),
+    ids: Sequence[ID] = (),
     name: str | None = None,
     email: str | None = None,
     is_admin: bool | None = None,
@@ -283,7 +315,7 @@ def login(
         tasks.add_task(send_login_email, user.id, target_url)
 
 
-def send_login_email(user_id: UUID, target_url: str) -> None:
+def send_login_email(user_id: ID, target_url: str) -> None:
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if not user:
@@ -692,7 +724,7 @@ def get_problem_page_data(*, db: Database, login: LoggedIn, id: ID) -> ProblemPa
 def create_problem(
     *,
     db: Database,
-    problem: UploadFile | UUID,
+    problem: UploadFile | ID,
     name: Annotated[str, Form()],
     tournament: Annotated[ID, Form()],
     start: Annotated[datetime | None, Form()] = None,
@@ -840,7 +872,7 @@ def delete_report(db: Database, login: LoggedIn, team: ID, problem: ID) -> None:
 
 
 class Reports(BaseSchema):
-    reports: dict[UUID, schemas.Report]
+    reports: dict[ID, schemas.Report]
     teams: dict[ID, schemas.Team]
     total: int
 
@@ -849,8 +881,8 @@ class Reports(BaseSchema):
 def get_reports(
     db: Database,
     login: LoggedIn,
-    problem: UUID | None = None,
-    team: UUID | None = None,
+    problem: ID | None = None,
+    team: ID | None = None,
     offset: int = 0,
 ) -> Reports:
     filters = [Report.visible_sql(login.team)]
@@ -1050,16 +1082,16 @@ def delete_results(*, db: Database, id: ID) -> None:
     db.commit()
 
 
-@admin.post("/match/result", tags=["match"], response_model=schemas.MatchResult)
+@admin.post("/match/result", tags=["match"])
 def add_result(
     *,
     db: Database,
     status: MatchStatus,
     time: datetime,
-    problem: UUID,
-    teams: Annotated[list[UUID], Form()],
-    generators: Annotated[list[UUID | None | Literal["undefined"]], Form()],
-    solvers: Annotated[list[UUID | None | Literal["undefined"]], Form()],
+    problem: ID,
+    teams: Annotated[list[ID], Form()],
+    generators: Annotated[list[ID | None | Literal["undefined"]], Form()],
+    solvers: Annotated[list[ID | None | Literal["undefined"]], Form()],
     points: Annotated[list[float], Form()],
     logs: UploadFile | None = None,
 ) -> MatchResult:
@@ -1089,20 +1121,20 @@ def add_result(
     return db_res
 
 
-@admin.put("/match/result/{id}", tags=["match"], response_model=schemas.MatchResult)
+@admin.put("/match/result/{id}", tags=["match"])
 def update_result(
     db: Database,
-    id: UUID,
+    id: ID,
     time: Annotated[datetime, Form()],
-    problem: Annotated[UUID, Form()],
+    problem: Annotated[ID, Form()],
     status: Annotated[MatchStatus, Form()],
-    teams: Annotated[list[UUID], Form()],
+    teams: Annotated[list[ID], Form()],
     generators: Annotated[
-        list[UUID | None | Literal["undefined"]], Form()
+        list[ID | None | Literal["undefined"]], Form()
     ],  # hack to make form parsing work
-    solvers: Annotated[list[UUID | None | Literal["undefined"]], Form()],
+    solvers: Annotated[list[ID | None | Literal["undefined"]], Form()],
     points: Annotated[list[float], Form()],
-    logs: UploadFile | UUID | None = None,
+    logs: UploadFile | ID | None = None,
 ) -> MatchResult:
     res = MatchResult.get_unwrap(db, id)
     res.time = time
@@ -1137,9 +1169,9 @@ def update_result(
 # *******************************************************************************
 
 
-@router.get("/extrapoints", tags=["extrapoints"], response_model=list[schemas.ExtraPoints])
+@router.get("/extrapoints", tags=["extrapoints"])
 def get_extra_points(
-    db: Database, login: LoggedIn, tournament: UUID | None = None, tag: str | None = None
+    db: Database, login: LoggedIn, tournament: ID | None = None, tag: str | None = None
 ) -> Sequence[ExtraPoints]:
     filters = [ExtraPoints.visible_sql(login.team)]
     if tournament is not None:
@@ -1154,7 +1186,7 @@ def create_extra_points(
     db: Database,
     time: Annotated[datetime, Body()],
     tag: Str32,
-    team: Annotated[UUID, Body()],
+    team: Annotated[ID, Body()],
     points: Annotated[float, Body()],
     description: Annotated[str, Body()] = "",
 ) -> ExtraPoints:
@@ -1168,10 +1200,10 @@ def create_extra_points(
 @admin.patch("/extrapoints/{id}", tags=["extrapoints"])
 def edit_extra_points(
     db: Database,
-    id: UUID,
+    id: ID,
     time: Annotated[datetime | None, Body()] = None,
     tag: Annotated[Str32 | None, Body()] = None,
-    team: Annotated[UUID | None, Body()] = None,
+    team: Annotated[ID | None, Body()] = None,
     points: Annotated[float | None, Body()] = None,
     description: Annotated[str | None, Body()] = None,
 ) -> ExtraPoints:
@@ -1191,7 +1223,7 @@ def edit_extra_points(
 
 
 @admin.delete("/extrapoints/{id}", tags=["extrapoints"])
-def delete_extra_points(db: Database, id: UUID) -> None:
+def delete_extra_points(db: Database, id: ID) -> None:
     points = ExtraPoints.get_unwrap(db, id)
     db.delete(points)
     db.commit()

@@ -7,7 +7,7 @@ from enum import Enum, StrEnum
 from os import environ
 from smtplib import SMTP
 from typing import Annotated, Any, Literal, Self, cast, get_args, get_origin
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlencode, urljoin, urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 from algobattle.util import Role
@@ -26,7 +26,7 @@ from fastapi.datastructures import Default, DefaultPlaceholder
 from fastapi.dependencies.utils import get_typed_return_annotation
 from fastapi.responses import FileResponse
 from fastapi.routing import APIRoute
-from pydantic import BeforeValidator, ByteSize, Field, TypeAdapter, WithJsonSchema
+from pydantic import ByteSize, Field, TypeAdapter, WithJsonSchema
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -54,6 +54,7 @@ from algobattle_web.models import (
     UserSettings,
     encode,
 )
+from algobattle_web.schemas import DateTime
 from algobattle_web.util import (
     BaseSchema,
     EmailConfig,
@@ -83,11 +84,6 @@ class EditAction(Enum):
     add = "add"
     remove = "remove"
 
-
-def strip_quotes(data: str) -> str:
-    return data.strip('"')
-
-DateTime = Annotated[datetime, BeforeValidator(strip_quotes)]
 
 # we can't use an actual type alias here to not break hey-api generation
 ID = Annotated[UUID, WithJsonSchema({"type": "string"}, "serialization")]
@@ -326,7 +322,12 @@ def send_login_email(user_id: ID, target_url: str) -> None:
         if not user:
             return
         token = user.login_token(db)
-        url = str(EnvConfig.get().base_url) + target_url + f"?login_token={token}"
+        parts = urlsplit(target_url)
+        query = parse_qs(parts.query)
+        query["login_token"] = [token]
+        query_str = urlencode(query, doseq=True)
+        url_path = urlunsplit(parts._replace(query=query_str)).lstrip("/")
+        url = urljoin(EnvConfig.get().base_url, url_path)
         if environ.get("DEV"):
             print(f"sending email to {user.email}: {url}")
             return
@@ -526,7 +527,7 @@ class ScoreEventType(StrEnum):
 
 class ScoreEvent(BaseSchema):
     type: ScoreEventType
-    time: schemas.LocalDatetime
+    time: DateTime
     points: dict[ID, float]
 
 

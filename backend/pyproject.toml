@@ -86,6 +86,7 @@ ignore = [
     "blind-except",
     "call-datetime-now-without-tzinfo",
     "async-function-with-timeout",
+    "type-check-without-type-error",
 ]
 
 [tool.ruff.lint.isort]

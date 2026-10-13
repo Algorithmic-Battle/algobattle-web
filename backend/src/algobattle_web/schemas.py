@@ -7,7 +7,14 @@ from urllib.parse import quote as urlencode
 from uuid import UUID
 
 from algobattle.util import Role
-from pydantic import ByteSize, Field, PlainSerializer, computed_field, field_validator
+from pydantic import (
+    BeforeValidator,
+    ByteSize,
+    Field,
+    PlainSerializer,
+    computed_field,
+    field_validator,
+)
 
 from algobattle_web.util import BaseSchema, EmailConfig, EnvConfig, MatchStatus, ObjID
 
@@ -17,7 +24,16 @@ def naive_localize(date: datetime) -> datetime:
     return date.astimezone()
 
 
-LocalDatetime = Annotated[datetime, PlainSerializer(naive_localize)]
+def strip_quotes(data: str) -> str:
+    if isinstance(data, datetime):
+        return data
+    elif isinstance(data, str):
+        return data.strip('"')
+    else:
+        raise ValueError
+
+
+type DateTime = Annotated[datetime, BeforeValidator(strip_quotes), PlainSerializer(naive_localize)]
 
 
 class Base(BaseSchema, ABC):
@@ -31,7 +47,7 @@ class DbFile(Base):
 
     filename: str
     media_type: str
-    timestamp: LocalDatetime
+    timestamp: DateTime
     alt_text: str
 
     @computed_field
@@ -68,7 +84,7 @@ class AdminServerSettings(ServerSettings):
     @classmethod
     def _(cls, value: object) -> str:
         if not isinstance(value, int):
-            raise ValueError  # ruff: ignore[type-check-without-type-error]
+            raise ValueError
         return ByteSize(value).human_readable(True)
 
 
@@ -95,8 +111,8 @@ class Problem(Base):
     name: str
     tournament: Tournament
     file: DbFile
-    start: LocalDatetime | None = None
-    end: LocalDatetime | None = None
+    start: DateTime | None = None
+    end: DateTime | None = None
     description: str
     image: DbFile | None = None
     colour: str
@@ -113,14 +129,14 @@ class Program(Base):
     team: ObjID
     role: Role
     file: DbFile
-    creation_time: LocalDatetime
+    creation_time: DateTime
     problem: ObjID
     user_editable: bool
 
 
 class ScheduledMatch(Base):
     name: str
-    time: LocalDatetime
+    time: DateTime
     problem: ObjID
     points: float
     repeats_id: UUID | None
@@ -135,14 +151,14 @@ class ResultParticipant(BaseSchema):
 
 class MatchResult(Base):
     status: MatchStatus
-    time: LocalDatetime
+    time: DateTime
     problem: ObjID
     participants: list[ResultParticipant]
     logs: DbFile | None = None
 
 
 class ExtraPoints(Base):
-    time: LocalDatetime
+    time: DateTime
     tag: str
     team: Team
     points: float

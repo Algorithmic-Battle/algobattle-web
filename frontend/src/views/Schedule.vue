@@ -107,7 +107,7 @@ onMounted(async () => {
 });
 
 function openModal(match: ScheduledMatch | undefined) {
-  editData.value = match ? deepCopy(match) : { points: 100 };
+  editData.value = match ? { ...match } : { points: 100 };
   repeatMatch.value = false;
   repeatOccurrences.value = 2;
   repeatInterval.value = 1;

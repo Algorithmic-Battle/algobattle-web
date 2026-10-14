@@ -64,7 +64,7 @@ def model_to_id(obj: object) -> UUID:
         if isinstance(obj.id, UUID):  # type: ignore
             return obj.id  # type: ignore
         else:
-            raise ValueError # ruff: ignore[type-check-without-type-error]
+            raise ValueError
     elif isinstance(obj, str):
         return UUID(obj)
     else:

@@ -1059,7 +1059,7 @@ def edit_schedule(
     affects: Annotated[ScheduleAffects, Body()] = "current",
 ) -> Sequence[ScheduledMatch]:
     base_match = unwrap(db.get(ScheduledMatch, id))
-    time_delta = time - base_match.time if time is not None else None
+    time_delta = time - base_match.time.astimezone() if time is not None else None
     matches = base_match.repeats_with(db, affects)
 
     for match in matches:

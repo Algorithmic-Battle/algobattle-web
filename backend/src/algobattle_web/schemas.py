@@ -8,6 +8,7 @@ from uuid import UUID
 
 from algobattle.util import Role
 from pydantic import (
+    AfterValidator,
     BeforeValidator,
     ByteSize,
     Field,
@@ -33,7 +34,12 @@ def strip_quotes(data: str) -> str:
         raise ValueError
 
 
-type DateTime = Annotated[datetime, BeforeValidator(strip_quotes), PlainSerializer(naive_localize)]
+type DateTime = Annotated[
+    datetime,
+    BeforeValidator(strip_quotes),
+    AfterValidator(naive_localize),
+    PlainSerializer(naive_localize),
+]
 
 
 class Base(BaseSchema, ABC):

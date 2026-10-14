@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, useAttrs, useId, watch } from "vue";
 import { Temporal } from "temporal-polyfill";
+import { fromLocalDateTimeInput, toLocalDateTimeInput } from "@/shared";
 
 defineOptions({ inheritAttrs: false });
 
@@ -37,10 +38,7 @@ const forwardedAttrs = computed(() =>
 watch(
   () => props.time,
   (value) => {
-    inputValue.value = value
-      ?.toZonedDateTimeISO("UTC")
-      .toPlainDateTime()
-      .toString({ smallestUnit: "minute" }) ?? "";
+    inputValue.value = toLocalDateTimeInput(value);
   },
   { immediate: true },
 );
@@ -48,7 +46,7 @@ watch(
 function defaultPlainTime(): Temporal.PlainTime {
   return props.defaultTime === "now"
     ? Temporal.Now.instant()
-        .toZonedDateTimeISO("UTC")
+        .toZonedDateTimeISO(Temporal.Now.timeZoneId())
         .toPlainTime()
         .round({ smallestUnit: "minute", roundingMode: "floor" })
     : props.defaultTime;
@@ -72,10 +70,7 @@ function updateTime(event: Event) {
     inputValue.value = localDateTime.toString({ smallestUnit: "minute" });
   }
 
-  emit(
-    "update:time",
-    localDateTime.toZonedDateTime("UTC").toInstant(),
-  );
+  emit("update:time", fromLocalDateTimeInput(localDateTime.toString()));
 }
 </script>
 

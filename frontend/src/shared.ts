@@ -20,7 +20,12 @@ export const store = reactive<{
 });
 
 export function formatDateTime(time: Temporal.Instant | Temporal.ZonedDateTime): string {
-    return time.toLocaleString("de-DE", {dateStyle: "medium", timeStyle: "short"})
+  const instant = time instanceof Temporal.Instant ? time : time.toInstant();
+  return instant.toLocaleString("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: Temporal.Now.timeZoneId(),
+  });
 }
 
 export function deepCopy<T>(obj: T): T {

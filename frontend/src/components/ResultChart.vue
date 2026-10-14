@@ -65,7 +65,10 @@ onMounted(getData);
 
 const labels = computed(() => {
   const t = matchEvents.value.map((e) =>
-    e.time.toLocaleString(undefined, { dateStyle: "medium" }),
+    e.time.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeZone: Temporal.Now.timeZoneId(),
+    }),
   );
   t.splice(0, 0, "Start");
   return t;
@@ -195,7 +198,10 @@ const options = computed<ChartOptions<"line">>(() => {
               return "Start";
             }
             const matchType = event.type === "match" ? "Match" : "Bonus Points";
-            return `${matchType} on ${event.time.toLocaleString(undefined, { dateStyle: "short" })}`;
+            return `${matchType} on ${event.time.toLocaleString(undefined, {
+              dateStyle: "short",
+              timeZone: Temporal.Now.timeZoneId(),
+            })}`;
           },
           label: function (tooltipItem) {
             return `${(tooltipItem.raw as DataObject).points.toString()} points`;

@@ -105,17 +105,19 @@ def main():
     SessionLocal.configure(bind=engine)
     last_check = datetime.now()
     while True:
+        now = datetime.now()
         with SessionLocal() as db:
             scheduled_matches = db.scalars(
-                select(ScheduledMatch).where(last_check <= ScheduledMatch.time, ScheduledMatch.time <= datetime.now())
+                select(ScheduledMatch).where(last_check <= ScheduledMatch.time, ScheduledMatch.time <= now)
             ).all()
             if scheduled_matches:
+                if environ.get("DEV"):
+                    print(f"{now}: running match")
                 run_match(db, scheduled_matches[0])
             else:
                 if environ.get("DEV"):
-                    print(f"{datetime.now()}: no matches to run")
-                last_check = datetime.now()
-        now = datetime.now()
+                    print(f"{now}: no matches to run")
+                last_check = now
         for _ in range(60 - now.second):
             sleep(1)
 

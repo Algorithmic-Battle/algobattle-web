@@ -278,7 +278,12 @@ async function deleteMatch() {
           />
           <label for="problem" class="form-label">Problem</label>
           <select id="problem" class="form-select" required v-model="editData.problem">
-            <option v-for="(problem, id) in problems" :value="id">{{ problem.name }}</option>
+            <option
+              v-for="problem in Object.values(problems).filter((p) => p.tournament.id === store.tournament?.id)"
+              :value="problem.id"
+              :key="problem.id"
+            >
+              {{ problem.name }}            </option>
           </select>
           <label for="points" class="form-label">Points</label>
           <input

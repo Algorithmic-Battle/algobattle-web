@@ -59,7 +59,7 @@ class DbFile(Base):
     @computed_field
     @property
     def location(self) -> str:
-        return f"{EnvConfig.get().base_url}/api/files/{urlencode(str(self.id))}"
+        return f"{EnvConfig.get().base_url.rstrip('/')}/api/files/{urlencode(str(self.id))}"
 
 
 class Tournament(Base):
@@ -138,6 +138,13 @@ class Program(Base):
     creation_time: DateTime
     problem: ObjID
     user_editable: bool
+
+
+class SelectedProgram(BaseSchema):
+    team: ObjID
+    problem: ObjID
+    generator: ObjID | None = None
+    solver: ObjID | None = None
 
 
 class ScheduledMatch(Base):

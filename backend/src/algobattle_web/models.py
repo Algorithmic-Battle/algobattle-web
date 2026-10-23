@@ -39,6 +39,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    event,
     inspect,
     select,
 )
@@ -715,6 +716,56 @@ class Program(Base, PermissionCheck):
     @classmethod
     def _editable_sql(cls, team: Team) -> ColumnElement[bool]:
         return Program.results.any() & Program.problem.has(Problem._editable(team))
+
+    def select(self, db: Session) -> Program | None:
+        """Selects this program as the generator or solver for its team and problem."""
+        selected = SelectedProgram.get(db, self.team, self.problem)
+        old = None
+        match self.role:
+            case ProgramRole.generator:
+                old = selected.generator
+                selected.generator_id = self.id
+            case ProgramRole.solver:
+                old = selected.solver
+                selected.solver_id = self.id
+            case _:
+                raise ValueError
+        return old
+
+
+class SelectedProgram(RawBase):
+    team: Mapped[Team] = relationship(lazy="joined")
+    team_id: Mapped[ID] = mapped_column(ForeignKey("teams.id"), primary_key=True, init=False)
+    problem: Mapped[Problem] = relationship(lazy="joined")
+    problem_id: Mapped[ID] = mapped_column(ForeignKey("problems.id"), primary_key=True, init=False)
+    generator_id: Mapped[ID | None] = mapped_column(ForeignKey("programs.id"), init=False)
+    generator: Mapped[Program | None] = relationship(
+        default=None, foreign_keys=[generator_id], lazy="joined", viewonly=True
+    )
+    solver_id: Mapped[ID | None] = mapped_column(ForeignKey("programs.id"), init=False)
+    solver: Mapped[Program | None] = relationship(
+        default=None, foreign_keys=[solver_id], lazy="joined", viewonly=True
+    )
+
+    @classmethod
+    def get(cls, db: Session, team: Team, problem: Problem) -> SelectedProgram:
+        """Returns the selected generator and solver for the given team and problem."""
+        selected = db.get(cls, (team.id, problem.id))
+        if selected is None:
+            selected = SelectedProgram(team=team, problem=problem)
+            db.add(selected)
+        return selected
+
+
+@event.listens_for(Session, "after_flush_postexec")
+def delete_empty_selected_programs(
+    session: Session,
+    _flush_context: object,
+) -> None:
+    session.query(SelectedProgram).filter(
+        SelectedProgram.generator_id.is_(None),
+        SelectedProgram.solver_id.is_(None),
+    ).delete(synchronize_session=False)
 
 
 type ScheduleAffects = Literal["current", "following", "all"]

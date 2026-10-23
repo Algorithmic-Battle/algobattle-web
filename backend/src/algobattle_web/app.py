@@ -101,6 +101,7 @@ async def lifespan(app: FastAPI):
                 stamp(alembic_cfg, "head")
             else:
                 upgrade(alembic_cfg, "head")
+            print(f"Database is at revision(s): {current_revs}")
 
     with SessionLocal() as db:
         try:

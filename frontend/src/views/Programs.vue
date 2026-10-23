@@ -5,6 +5,8 @@ import {
   getProblems,
   searchProgram,
   uploadProgram as uploadProgramRequest,
+  getSelectedPrograms,
+  selectProgram,
 } from "@client";
 import { formatDateTime, store, type ModelDict } from "@/shared";
 import { Modal } from "bootstrap";
@@ -39,6 +41,7 @@ const problems = ref<ModelDict<Problem>>({});
 const teams = ref<ModelDict<Team>>({});
 const total = ref(0);
 const offset = ref(0);
+const selectedPrograms = ref<{[key: string]: boolean}>({});
 const searchData = ref({
   name: null,
   team: null,
@@ -77,13 +80,16 @@ const newProgData = ref<{
   role?: Role;
   problem?: string;
   file?: File;
+  selected?: boolean;
 }>({
   name: "",
+  selected: true,
 });
 let modal: Modal;
 async function openModal() {
   newProgData.value = {
     name: "",
+    selected: true,
   };
   modal.show();
 }
@@ -97,15 +103,19 @@ async function uploadProgram() {
   ) {
     return;
   }
-  const newProgramResult = await uploadProgramRequest({
+  const res = (await uploadProgramRequest({
     name: newProgData.value.name,
     role: newProgData.value.role,
     problem: newProgData.value.problem,
+    selected: newProgData.value.selected,
     bodyUploadProgram: { file: newProgData.value.file },
-  });
-  const newProgram = (newProgramResult.data ?? null) as Program | null;
-  if (newProgram) {
-    programs.value[newProgram.id] = newProgram;
+  })).data;
+  programs.value[res.new.id] = res.new;
+  if (newProgData.value.selected) {
+    selectedPrograms.value[res.new.id] = true;
+  }
+  if (res.unselected) {
+    delete selectedPrograms.value[res.unselected.id];
   }
   modal.hide();
 }
@@ -115,8 +125,18 @@ async function deleteProgram(program: Program) {
   delete programs.value[program.id];
 }
 
-onMounted(() => {
-  search();
+async function selProgram(program: Program) {
+  const selected = (await selectProgram({ program: program.id })).data;
+  if (selected.unselected) {
+    delete selectedPrograms.value[selected.unselected.id];
+  }
+  selectedPrograms.value[selected.new.id] = true;
+}
+
+onMounted(async () => {
+  await search();
+  const selected =(await getSelectedPrograms()).data ?? [];
+  selectedPrograms.value = Object.fromEntries(selected.flatMap((p) => [[p.generator, true], [p.solver, true]]));
   modal = Modal.getOrCreateInstance("#uploadProgram");
 });
 </script>
@@ -133,10 +153,11 @@ onMounted(() => {
           <th scope="col">Name</th>
           <th scope="col">File</th>
           <th scope="col"></th>
+          <th scope="col"></th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="program in sortedPrograms" :key="program.id">
+        <tr v-for="program in sortedPrograms" :key="program.id" :class="{ 'table-success': selectedPrograms[program.id] }">
           <td>{{ problems[program.problem].name }}</td>
           <td v-if="store.team == 'admin'">{{ teams[program.team].name }}</td>
           <td>{{ program.role }}</td>
@@ -150,6 +171,19 @@ onMounted(() => {
               title="Download program file"
               >Download <i class="bi bi-download ms-1"></i
             ></a>
+          </td>
+          <td class="text-end">
+            <span v-if="selectedPrograms[program.id]" class="badge bg-success mb-0">
+              Selected
+            </span>
+            <button
+              v-else-if="store.team !== 'admin' && activeProblems.some((p) => p.id === program.problem)"
+              type="button"
+              class="btn btn-outline-success btn-sm"
+              @click="selProgram(program)"
+            >
+              Select
+            </button>
           </td>
           <td class="text-end">
             <DeleteButton
@@ -230,6 +264,17 @@ onMounted(() => {
             <div class="mb-3">
               <label for="file_select" class="form-label mt-3">Select new program file</label>
               <FileInput id="file_select" v-model="newProgData.file" accept=".prog" required />
+            </div>
+            <div class="form-check mb-3">
+              <input
+                id="selected"
+                v-model="newProgData.selected"
+                class="form-check-input"
+                type="checkbox"
+              />
+              <label class="form-check-label" for="selected">
+                Select this program for {{ newProgData.problem ? problems[newProgData.problem]?.name : "the selected problem" }}
+              </label>
             </div>
           </div>
         </div>

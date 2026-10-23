@@ -10,7 +10,14 @@ from anyio import run
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from algobattle_web.models import File, MatchResult, Program, ResultParticipant, ScheduledMatch
+from algobattle_web.models import (
+    File,
+    MatchResult,
+    Program,
+    ResultParticipant,
+    ScheduledMatch,
+    SelectedProgram,
+)
 from algobattle_web.util import EnvConfig, MatchStatus, SessionLocal, install_packages
 
 
@@ -34,34 +41,27 @@ def run_match(db: Session, scheduled_match: ScheduledMatch):
         participants: dict[str, ResultParticipant] = {}
         excluded_teams = set[str]()
         for team in scheduled_match.problem.tournament.teams:
-            gen = (
-                db.scalars(
-                    select(Program)
-                    .where(
-                        Program.team_id == team.id,
-                        Program.problem_id == scheduled_match.problem_id,
-                        Program.role == Role.generator,
-                    )
-                    .order_by(Program.creation_time.desc())
-                    .limit(1)
+            selected = SelectedProgram.get(db, team, scheduled_match.problem)
+            gen = selected.generator
+            sol = selected.solver
+
+            query = (
+                select(Program)
+                .where(
+                    Program.team_id == team.id,
+                    Program.problem_id == scheduled_match.problem_id
                 )
-                .unique()
-                .first()
+                .order_by(Program.creation_time.desc())
+                .limit(1)
             )
-            sol = (
-                db.scalars(
-                    select(Program)
-                    .where(
-                        Program.team_id == team.id,
-                        Program.problem_id == scheduled_match.problem_id,
-                        Program.role == Role.solver,
-                    )
-                    .order_by(Program.creation_time.desc())
-                    .limit(1)
-                )
-                .unique()
-                .first()
-            )
+            if gen is None:
+                gen = db.scalars(query.where(Program.role == Role.generator)).first()
+                if gen is not None:
+                    selected.generator_id = gen.id
+            if sol is None:
+                sol = db.scalars(query.where(Program.role == Role.solver)).first()
+                if sol is not None:
+                    selected.solver_id = sol.id
 
             if gen and sol:
                 config.teams[team.name] = TeamInfo(generator=gen.file.path, solver=sol.file.path)

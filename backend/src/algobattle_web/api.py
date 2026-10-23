@@ -46,6 +46,7 @@ from algobattle_web.models import (
     ResultParticipant,
     ScheduleAffects,
     ScheduledMatch,
+    SelectedProgram,
     ServerSettings,
     Team,
     TeamSettings,
@@ -128,7 +129,9 @@ class SchemaRoute(APIRoute):
     ) -> None:
         if isinstance(response_model, DefaultPlaceholder):
             return_annotation = get_typed_return_annotation(endpoint)
-            if not (isinstance(return_annotation, type) and issubclass(return_annotation, Response)):
+            if not (
+                isinstance(return_annotation, type) and issubclass(return_annotation, Response)
+            ):
                 response_model = replace_models(return_annotation)
         if response_model_exclude_unset is None:
             response_model_exclude_unset = True
@@ -718,9 +721,7 @@ def get_problems(
 
 @router.get("/problem/pagedata", tags=["problem"])
 def get_problem_page_data(*, db: Database, login: LoggedIn, id: ID) -> ProblemPageData | None:
-    prob = db.scalars(
-        select(Problem).where(Problem.id == id, Problem.visible(login.team))
-    ).first()
+    prob = db.scalars(select(Problem).where(Problem.id == id, Problem.visible(login.team))).first()
     if prob is None:
         raise ValueError
     return prob.page_data
@@ -962,10 +963,22 @@ def search_program(
     )
 
 
+class SelectResult(BaseSchema):
+    new: schemas.Program
+    unselected: schemas.Program | None
+
+
 @router.post("/program", tags=["program"])
 def upload_program(
-    *, db: Database, login: LoggedIn, name: str = "", role: Role, problem: ID, file: UploadFile
-) -> Program:
+    *,
+    db: Database,
+    login: LoggedIn,
+    name: str = "",
+    role: Role,
+    problem: ID,
+    file: UploadFile,
+    selected: bool = False,
+) -> SelectResult:
     if file.size and ServerSettings.get(db).upload_file_limit < file.size:
         raise ValueError
     problem_obj = unwrap(db.get(Problem, problem))
@@ -975,8 +988,14 @@ def upload_program(
     problem_obj.assert_editable(login.team)
     prog = Program(name, login.team, role, DbFile.from_file(file), problem_obj)
     db.add(prog)
+    unselected = None
+    if selected:
+        unselected = prog.select(db)
     db.commit()
-    return prog
+    return SelectResult(
+        new=schemas.Program.model_validate(prog),
+        unselected=schemas.Program.model_validate(unselected) if unselected else None,
+    )
 
 
 @router.delete("/program/{id}", tags=["program"])
@@ -985,6 +1004,30 @@ def delete_program(*, db: Database, login: LoggedIn, id: ID) -> None:
     program.assert_editable(login.team)
     db.delete(program)
     db.commit()
+
+
+@router.get("/program/selected", tags=["program"])
+def get_selected_programs(*, db: Database, login: LoggedIn) -> Sequence[SelectedProgram]:
+    if login.team is None or login.tournament is None:
+        raise HTTPException(400, "User has not selected a team and/or tournament")
+    constraints = [SelectedProgram.problem.has(Problem.tournament_id == login.tournament.id)]
+    if login.team != "admin":
+        constraints.append(SelectedProgram.team_id == login.team.id)
+    return db.scalars(select(SelectedProgram).where(*constraints)).unique().all()
+
+
+@router.patch("/program/selected", tags=["program"])
+def select_program(*, db: Database, login: LoggedIn, program: ID) -> SelectResult:
+    if not isinstance(login.team, Team):
+        raise HTTPException(400, "User cannot select a program")
+    program_obj = Program.get_unwrap(db, program)
+    program_obj.assert_visible(login.team)
+    unselected = program_obj.select(db)
+    db.commit()
+    return SelectResult(
+        new=schemas.Program.model_validate(program_obj),
+        unselected=schemas.Program.model_validate(unselected) if unselected else None,
+    )
 
 
 # *******************************************************************************
@@ -998,7 +1041,9 @@ class ScheduleInfo(BaseSchema):
 
 
 @router.get("/match/schedule", tags=["match"])
-def scheduled_matches(*, db: Database, login: LoggedIn, scheduled_with: ID | None = None) -> ScheduleInfo:
+def scheduled_matches(
+    *, db: Database, login: LoggedIn, scheduled_with: ID | None = None
+) -> ScheduleInfo:
     if login.tournament is None:
         return ScheduleInfo(matches={}, problems={})
     conditions = [

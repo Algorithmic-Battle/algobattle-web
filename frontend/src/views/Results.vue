@@ -307,6 +307,15 @@ function makeFreeform() {
     extraEditData.value.freeformTag = true;
   }
 }
+
+function resultPoints(result: MatchResult, team: Team | "admin" | null) {
+  const total = result.participants.reduce((acc, p) => acc + (p.points ?? 0), 0);
+  if (team === "admin") {
+    return total.toString();
+  }
+  const own = result.participants.find((p) => p.team_id === team?.id)?.points ?? 0;
+  return `${own} / ${total}`;
+}
 </script>
 
 <template>
@@ -342,6 +351,7 @@ function makeFreeform() {
             <th scope="col">Time</th>
             <th scope="col">Problem</th>
             <th scope="col">Status</th>
+            <th sope="col">Points</th>
             <th scope="col">Details</th>
             <th v-if="store.team == 'admin'" scope="col"></th>
           </tr>
@@ -353,6 +363,7 @@ function makeFreeform() {
               <RouterLink v-if="problems[result.problem]" :to="problemURL(problems[result.problem])">{{ problems[result.problem].name }}</RouterLink>
             </td>
             <td>{{ result.status }}</td>
+            <td>{{ resultPoints(result, store.team) }}</td>
             <td>
               <button type="button" class="btn btn-outline-primary btn-sm" @click="openDetail(result)">
                 <i class="bi bi-eye-fill"></i>
@@ -600,8 +611,10 @@ function makeFreeform() {
           <template v-if="detailView">
             <table class="table">
               <thead>
-                <th scope="col"></th>
-                <th scope="col"></th>
+                <tr>
+                  <th scope="col"></th>
+                  <th scope="col"></th>
+                </tr>
               </thead>
               <tbody>
                 <tr v-if="ownParticipant?.generator">

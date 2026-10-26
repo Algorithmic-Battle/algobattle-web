@@ -14,6 +14,7 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y git \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /code/algobattle
+ADD "https://api.github.com/repos/Algorithmic-Battle/algobattle/commits/release?per_page=1" latest_commit
 RUN git clone --depth 1 --branch release https://github.com/Algorithmic-Battle/algobattle.git .
 COPY --from=api_builder /code/algobattle_version.txt /tmp/algobattle_version.txt
 COPY docker/algobattle_version.py .

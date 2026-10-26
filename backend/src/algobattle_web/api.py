@@ -1142,8 +1142,11 @@ def results(
     filters = [MatchResult.problem.has(Problem.visible(login.team))]
     if problem is not None:
         filters.append(MatchResult.problem_id == problem)
-    if tournament is not None:
-        filters.append(MatchResult.problem.has(Problem.tournament_id == tournament))
+    if login.tournament is None:
+        if login.tournament is None:
+            raise HTTPException(400, "User has not selected a tournament")
+        tournament = login.tournament.id
+    filters.append(MatchResult.problem.has(Problem.tournament_id == tournament))
     results = db.scalars(select(MatchResult).where(*filters)).all()
     return MatchResultData(
         results=encode(results),
